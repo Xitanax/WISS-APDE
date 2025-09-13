@@ -1,0 +1,75 @@
+:root{
+  --bg:#0f1220; --panel:#161a2b; --muted:#8a91a6; --text:#e9edf6;
+  --brand:#8f5bd6; --brand-2:#66d99b; --danger:#e85b5b; --ok:#4caf50;
+  --card:#1b2035; --border:#2a2f48;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif;
+  background:linear-gradient(180deg,#0b0e1a,#0f1220);
+  color:var(--text);
+}
+
+.topbar{
+  position:sticky; top:0; z-index:10;
+  display:flex; align-items:center; gap:16px;
+  padding:10px 16px; background:#0c1020cc; backdrop-filter: blur(6px);
+  border-bottom:1px solid var(--border);
+}
+.brand{font-weight:700; letter-spacing:.2px}
+.mainnav{display:flex; gap:12px; flex:1; align-items:center}
+.mainnav a{color:var(--muted); text-decoration:none; padding:6px 10px; border-radius:8px}
+.mainnav a:hover{background:var(--panel); color:var(--text)}
+.mainnav .divider{flex:0 0 1px; height:20px; background:var(--border); margin:0 4px}
+.authbox{display:flex; gap:8px; align-items:center}
+.authbox .role{font-size:13px; color:var(--muted)}
+.btn{
+  border:none; background:var(--brand); color:white; padding:8px 12px; border-radius:10px;
+  box-shadow: var(--shadow); cursor:pointer; font-weight:600
+}
+.btn.small{padding:6px 10px; font-size:13px}
+.btn.ghost{background:transparent; color:var(--muted); box-shadow:none; border:1px solid var(--border)}
+.btn.danger{background:var(--danger)}
+.btn.ok{background:var(--ok)}
+.btn[disabled]{opacity:.5; cursor:not-allowed}
+
+.container{max-width:1100px; margin:24px auto; padding:0 16px}
+.view.hidden{display:none}
+
+.cards{display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:14px}
+.card{
+  background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px;
+  box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px
+}
+.card h3{margin:0 0 4px 0}
+.card .muted{color:var(--muted); font-size:14px}
+.row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+.bar{display:flex; gap:12px; align-items:end; flex-wrap:wrap}
+.mt{margin-top:18px}
+
+.form{display:grid; gap:10px; grid-template-columns:1fr}
+.form label{display:grid; gap:6px; font-size:14px; color:var(--muted)}
+input,select,textarea{
+  width:100%; padding:10px 12px; background:#141931; color:var(--text);
+  border:1px solid var(--border); border-radius:10px; outline:none;
+}
+textarea{resize:vertical}
+
+dialog{border:none; border-radius:16px; padding:0; background:var(--panel); color:var(--text); box-shadow:var(--shadow); width:min(520px,90vw)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+.tabs menu{display:flex; gap:6px; padding:10px; border-bottom:1px solid var(--border); margin:0}
+.tabs menu button{all:unset; padding:8px 12px; border-radius:10px; cursor:pointer; color:var(--muted)}
+.tabs menu button.active{background:var(--brand); color:white}
+.tabs .pane{padding:16px; display:none}
+.tabs .pane.active{display:grid; gap:10px}
+
+.toast{position:fixed; right:16px; bottom:16px; background:#202744; color:#fff; padding:10px 14px; border-radius:12px; box-shadow:var(--shadow)}
+.toast.hidden{display:none}
+
+.mono{background:#0a0d1a; padding:10px; border:1px solid var(--border); border-radius:12px; overflow:auto; max-height:420px}
+.badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#243055; color:#baccff}
+.badge.green{background:#1f3a2b; color:#b1f3c0}
+.badge.red{background:#3a1f1f; color:#f3b1b1}

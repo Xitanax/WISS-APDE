@@ -1,0 +1,62 @@
+{
+  "info": { "name": "Chocadies API", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": "http://localhost:3000/api/health" }
+    },
+    {
+      "name": "Bootstrap Admin",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "x-bootstrap-secret", "value": "my-super-secret" }],
+        "url": "http://localhost:3000/api/auth/bootstrap-admin"
+      }
+    },
+    {
+      "name": "Login",
+      "event": [{
+        "listen": "test",
+        "script": { "exec": ["pm.environment.set('token', pm.response.json().token);"] }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"admin@chocadies.local\",\"password\":\"secret123\"}" },
+        "url": "http://localhost:3000/api/auth/login"
+      }
+    },
+    {
+      "name": "List Users (API key)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "x-api-key", "value": "devkey" }],
+        "url": "http://localhost:3000/api/v2/users"
+      }
+    },
+    {
+      "name": "Create User (API key)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "devkey" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\"email\":\"hr@chocadies.local\",\"password\":\"secret123\",\"role\":\"hr\"}" },
+        "url": "http://localhost:3000/api/v2/users/create"
+      }
+    },
+    {
+      "name": "My Applications (JWT)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "http://localhost:3000/api/v2/my/applications"
+      }
+    },
+    {
+      "name": "Public Jobs",
+      "request": { "method": "GET", "url": "http://localhost:3000/api/public/jobs" }
+    }
+  ]
+}
