@@ -2,7 +2,7 @@ import { Link, NavLink } from "react-router-dom";
 import { Book, FileText, LogIn, LogOut, User, Briefcase, Calendar, Shield } from "lucide-react";
 
 export default function Header({ token, role, onLogout }:{
-  token?: string | null; role?: "admin" | "applicant" | null; onLogout: () => void;
+  token?: string | null; role?: "admin" | "hr" | "applicant" | null; onLogout: () => void;
 }) {
   const navLink = ({ isActive }: any) =>
     "px-3 py-2 rounded-lg " + (isActive ? "bg-slate-900 text-white" : "hover:bg-slate-200");
@@ -17,6 +17,9 @@ export default function Header({ token, role, onLogout }:{
               <NavLink className={navLink} to="/applications"><FileText size={16}/> Bewerbungen</NavLink>
               <NavLink className={navLink} to="/meetings"><Calendar size={16}/> Meetings</NavLink>
             </>
+          )}
+          {token && role==="hr" && (
+            <NavLink className={navLink} to="/hr"><Briefcase size={16}/> HR</NavLink>
           )}
           {token && role==="admin" && (
             <NavLink className={navLink} to="/admin"><Shield size={16}/> Admin</NavLink>

@@ -1,723 +1,188 @@
 openapi: 3.0.3
 info:
   title: Chocadies Recruiting API
-  version: "2.0.0"
-  description: |
-    Interne Recruiting-API der Chocolatier Chocadies AG.
-    - Auth via **JWT Bearer** (Admin/HR/Applicant)
-    - Partner-API via **x-api-key** (Agencies)
+  version: "2.1.0"
 servers:
   - url: /
-tags:
-  - name: Health
-  - name: Auth
-  - name: Public
-  - name: Users (admin)
-  - name: Jobs (admin)
-  - name: Applications
-  - name: Meetings
-  - name: LinkedIn (dummy)
-  - name: Agencies (admin)
-  - name: Agency API (partner)
-
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-    agencyKey:
-      type: apiKey
-      in: header
-      name: x-api-key
-  schemas:
-    Error:
-      type: object
-      properties:
-        error:
-          type: string
-      example: { error: "Missing token" }
-
-    LoginResponse:
-      type: object
-      properties:
-        token: { type: string }
-        email: { type: string, format: email }
-        role:  { type: string, enum: [admin, applicant] }
-      required: [token, email, role]
-      example:
-        token: "eyJhbGciOi..."
-        email: "admin@chocadies.local"
-        role: "admin"
-
-    UserPublic:
-      type: object
-      properties:
-        id: { type: string }
-        email: { type: string, format: email }
-        role: { type: string, enum: [admin, applicant] }
-        birthdate: { type: string, format: date-time, nullable: true }
-        address: { type: string, nullable: true }
-
-    JobPublic:
-      type: object
-      properties:
-        id: { type: string }
-        title: { type: string }
-        description: { type: string }
-      required: [id, title]
-
-    JobAdmin:
-      allOf:
-        - $ref: '#/components/schemas/JobPublic'
-        - type: object
-          properties:
-            open: { type: boolean }
-            linkedinPostId: { type: string, nullable: true }
-
-    ApplicationPublic:
-      type: object
-      properties:
-        id: { type: string }
-        status: { type: string, enum: [submitted, in_review, accepted, rejected] }
-        job:
-          type: object
-          properties:
-            id: { type: string }
-            title: { type: string }
-            description: { type: string }
-        createdAt: { type: string, format: date-time }
-
-    ApplicationAdmin:
-      type: object
-      properties:
-        id: { type: string }
-        status: { type: string, enum: [submitted, in_review, accepted, rejected] }
-        applicant:
-          type: object
-          properties:
-            email: { type: string, format: email }
-            birthdate: { type: string, format: date-time, nullable: true }
-            address: { type: string, nullable: true }
-        createdAt: { type: string, format: date-time }
-
-    MeetingPublic:
-      type: object
-      properties:
-        id: { type: string }
-        status: { type: string, enum: [proposed, accepted, cancelled] }
-        startsAt: { type: string, format: date-time }
-        endsAt:   { type: string, format: date-time }
-        mode: { type: string, enum: [online, onsite] }
-        location: { type: string }
-        job:
-          type: object
-          properties:
-            id: { type: string }
-            title: { type: string }
-
-    MeetingAdmin:
-      type: object
-      properties:
-        id: { type: string }
-        status: { type: string, enum: [proposed, accepted, cancelled] }
-        startsAt: { type: string, format: date-time }
-        endsAt:   { type: string, format: date-time }
-        mode: { type: string, enum: [online, onsite] }
-        location: { type: string }
-        applicant:
-          type: object
-          properties:
-            email: { type: string, format: email }
-
-    Agency:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        apiKey: { type: string, nullable: true }
-        active: { type: boolean, nullable: true }
-        permissions:
-          type: array
-          items: { type: string }
-      example:
-        id: "68c56..."
-        name: "TalentBridge GmbH"
-        apiKey: "97b6...d8c0"
-        active: true
-        permissions: ["jobs:read", "applications:read"]
-
 paths:
   /api/health:
     get:
-      tags: [Health]
       summary: Healthcheck
       responses:
-        '200':
-          description: ok
-          content:
-            application/json:
-              schema: { type: string, example: "ok" }
-
-  /api/auth/bootstrap-admin:
-    post:
-      tags: [Auth]
-      summary: Einmaliges Anlegen des Admin-Users
-      parameters:
-        - in: header
-          name: x-bootstrap-secret
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email, password]
-              properties:
-                email: { type: string, format: email }
-                password: { type: string, format: password }
-      responses:
-        '200':
-          description: Admin angelegt oder vorhanden
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  user:
-                    type: object
-                    properties:
-                      id: { type: string }
-                      email: { type: string }
-                      role: { type: string }
-        '403': { description: Secret falsch }
+        '200': { description: ok }
 
   /api/auth/login:
     post:
-      tags: [Auth]
       summary: Login (JWT)
       requestBody:
         required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email, password]
-              properties:
-                email: { type: string, format: email }
-                password: { type: string, format: password }
+        content: { application/json: { schema: { type: object, required: [email, password], properties: { email: {type: string}, password: {type: string} } } } }
       responses:
-        '200':
-          description: Token + Rolle
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/LoginResponse' }
-        '401':
-          description: Ungültig
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-
-  /api/auth/me:
-    get:
-      tags: [Auth]
-      security: [{ bearerAuth: [] }]
-      summary: Session-Info
-      responses:
-        '200':
-          description: E-Mail + Rolle
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  email: { type: string }
-                  role: { type: string }
+        '200': { description: token }
 
   /api/public/register:
     post:
-      tags: [Public]
       summary: Applicant registrieren
       requestBody:
         required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email, password]
-              properties:
-                email: { type: string, format: email }
-                password: { type: string, format: password }
-                birthdate: { type: string, format: date }
-                address: { type: string }
+        content: { application/json: { schema: { type: object, required: [email, password], properties: { email: {type: string}, password: {type: string}, birthdate: {type: string}, address: {type: string} } } } }
       responses:
         '200': { description: ok }
-        '400':
-          description: bereits registriert
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
 
   /api/public/jobs:
     get:
-      tags: [Public]
-      summary: Öffentliche Stellen
+      summary: Öffentliche Jobs
       responses:
-        '200':
-          description: Liste
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/JobPublic' }
-
-  /api/v2/users:
-    get:
-      tags: [Users (admin)]
-      security: [{ bearerAuth: [] }]
-      summary: Nutzerliste (Admin)
-      responses:
-        '200':
-          description: Liste von Usern
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/UserPublic' }
-        '401': { description: Missing/Invalid token }
+        '200': { description: Liste }
 
   /api/v2/jobs:
     get:
-      tags: [Jobs (admin)]
+      summary: Jobs (HR)
       security: [{ bearerAuth: [] }]
-      summary: Liste (intern)
-      responses:
-        '200':
-          description: Jobs intern
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/JobAdmin' }
-    post:
-      tags: [Jobs (admin)]
-      security: [{ bearerAuth: [] }]
-      summary: Job anlegen
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [title]
-              properties:
-                title: { type: string }
-                description: { type: string }
-      responses:
-        '200':
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/JobAdmin' }
-
-  /api/v2/jobs/{id}:
-    patch:
-      tags: [Jobs (admin)]
-      security: [{ bearerAuth: [] }]
-      summary: Job ändern
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                title: { type: string }
-                description: { type: string }
-                open: { type: boolean }
       responses:
         '200': { description: ok }
-    delete:
-      tags: [Jobs (admin)]
+    post:
+      summary: Job anlegen (HR)
       security: [{ bearerAuth: [] }]
-      summary: Job löschen
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [title], properties: { title: {type: string}, description: {type: string}, open: {type: boolean} } } } }
       responses:
         '200': { description: ok }
 
   /api/v2/applications:
-    post:
-      tags: [Applications]
-      security: [{ bearerAuth: [] }]
-      summary: Bewerbung anlegen (Applicant)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [jobId]
-              properties:
-                jobId: { type: string }
-      responses:
-        '201':
-          description: erstellt
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  id: { type: string }
-                  status: { type: string }
-        '409':
-          description: already_applied
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
     get:
-      tags: [Applications]
+      summary: Bewerbungen (HR) – optional nach jobId filtern, sonst alle
       security: [{ bearerAuth: [] }]
-      summary: Bewerbungen eines Jobs (Admin/HR)
       parameters:
         - in: query
           name: jobId
-          required: true
           schema: { type: string }
       responses:
-        '200':
-          description: Liste Admin-View
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/ApplicationAdmin' }
+        '200': { description: Liste }
+    post:
+      summary: Bewerbung absenden (Applicant, inkl. optionale Notiz)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [jobId], properties: { jobId: {type: string}, note: {type: string} } } } }
+      responses:
+        '201': { description: erstellt }
 
   /api/v2/applications/me:
     get:
-      tags: [Applications]
-      security: [{ bearerAuth: [] }]
       summary: Meine Bewerbungen (Applicant)
-      responses:
-        '200':
-          description: Liste Applicant-View
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/ApplicationPublic' }
-
-  /api/v2/applications/{id}:
-    patch:
-      tags: [Applications]
       security: [{ bearerAuth: [] }]
-      summary: Bewerbung Status ändern (Admin/HR)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                status:
-                  type: string
-                  enum: [submitted, in_review, accepted, rejected]
       responses:
-        '200': { description: ok }
-    delete:
-      tags: [Applications]
-      security: [{ bearerAuth: [] }]
-      summary: Bewerbung löschen (Admin/HR)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: ok }
+        '200': { description: Liste }
 
   /api/v2/meetings:
-    post:
-      tags: [Meetings]
+    get:
+      summary: Meetings (HR) – optional jobId
       security: [{ bearerAuth: [] }]
-      summary: Meeting vorschlagen/erstellen
-      description: |
-        Applicant: { jobId, startsAt, endsAt, mode, location }
-        Admin/HR kann zusätzlich applicantEmail angeben.
+      parameters:
+        - in: query
+          name: jobId
+          schema: { type: string }
+      responses:
+        '200': { description: Liste }
+    post:
+      summary: Meeting anlegen (Applicant Vorschlag / HR mit applicantEmail)
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [jobId, startsAt, endsAt]
               properties:
                 jobId: { type: string }
-                applicantEmail: { type: string }
                 startsAt: { type: string, format: date-time }
-                endsAt:   { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
                 mode: { type: string, enum: [online, onsite] }
                 location: { type: string }
+                applicantEmail: { type: string, description: "Nur HR" }
       responses:
-        '200':
-          description: ok
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  id: { type: string }
-                  status: { type: string }
+        '200': { description: ok }
 
+  /api/v2/users:
     get:
-      tags: [Meetings]
+      summary: Benutzerliste (Admin)
       security: [{ bearerAuth: [] }]
-      summary: Meetings zu Job (Admin/HR)
+      responses:
+        '200': { description: ok }
+    post:
+      summary: Benutzer anlegen (Admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [email, password, role], properties: { email: {type: string}, password: {type: string}, role: {type: string, enum: [admin, hr, applicant]} } } } }
+      responses:
+        '201': { description: ok }
+
+  /api/v2/agencies:
+    get:
+      summary: Agencies auflisten (Admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: ok }
+    post:
+      summary: Agency anlegen (Admin) – gibt API-Key zurück
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: {type: string} } } } }
+      responses:
+        '200': { description: ok }
+
+  /api/v2/agencies/{id}/rotate-key:
+    post:
+      summary: Agency-Key rotieren (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: ok }
+
+  /api/v2/agencies/{id}:
+    delete:
+      summary: Agency löschen (Admin)
+      security: [{ bearerAuth: [] }]
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: ok }
+
+  /api/agency/jobs:
+    get:
+      summary: Partner-API – Jobs (per x-api-key)
+      parameters: [{ in: header, name: x-api-key, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: ok }
+
+  /api/agency/applications:
+    get:
+      summary: Partner-API – Bewerbungen (per x-api-key)
       parameters:
+        - in: header
+          name: x-api-key
+          required: true
+          schema: { type: string }
         - in: query
           name: jobId
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Liste Admin-View
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/MeetingAdmin' }
-
-  /api/v2/meetings/me:
-    get:
-      tags: [Meetings]
-      security: [{ bearerAuth: [] }]
-      summary: Meine Meetings (Applicant)
-      responses:
-        '200':
-          description: Liste Applicant-View
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/MeetingPublic' }
-
-  /api/v2/meetings/{id}:
-    patch:
-      tags: [Meetings]
-      security: [{ bearerAuth: [] }]
-      summary: Meeting aktualisieren (Admin/HR)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                status: { type: string, enum: [proposed, accepted, cancelled] }
-                location: { type: string }
-      responses:
-        '200': { description: ok }
-    delete:
-      tags: [Meetings]
-      security: [{ bearerAuth: [] }]
-      summary: Meeting löschen (Admin/HR)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: ok }
-
-  /api/v2/linkedin/publish/{jobId}:
-    post:
-      tags: [LinkedIn (dummy)]
-      security: [{ bearerAuth: [] }]
-      summary: Dummy-Publish auf LinkedIn
-      parameters:
-        - in: path
-          name: jobId
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: ok + fake URL
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  jobId: { type: string }
-                  linkedinPostId: { type: string }
-                  url: { type: string }
-
-  /api/v2/linkedin/publish/{jobId}:
-    delete:
-      tags: [LinkedIn (dummy)]
-      security: [{ bearerAuth: [] }]
-      summary: Dummy-Unpublish
-      parameters:
-        - in: path
-          name: jobId
-          required: true
           schema: { type: string }
       responses:
         '200': { description: ok }
 
   /api/v2/linkedin/import-applicant:
     post:
-      tags: [LinkedIn (dummy)]
+      summary: (Dummy) Kandidaten aus LinkedIn importieren (HR)
       security: [{ bearerAuth: [] }]
-      summary: Dummy-Import eines Bewerbers (optional inkl. Bewerbung)
       requestBody:
         required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [profileUrl, email, name]
-              properties:
-                profileUrl: { type: string }
-                email: { type: string, format: email }
-                name: { type: string }
-                birthdate: { type: string, format: date }
-                address: { type: string }
-                jobId: { type: string, description: "Optional: legt sofort Bewerbung an" }
-      responses:
-        '200':
-          description: ok + IDs
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  userId: { type: string }
-                  applicationId: { type: string, nullable: true }
-
-  /api/v2/agencies:
-    post:
-      tags: [Agencies (admin)]
-      security: [{ bearerAuth: [] }]
-      summary: Agency anlegen (liefert apiKey)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name: { type: string }
-      responses:
-        '200':
-          description: ok + apiKey
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Agency' }
-    get:
-      tags: [Agencies (admin)]
-      security: [{ bearerAuth: [] }]
-      summary: Agencies auflisten
-      responses:
-        '200':
-          description: Liste
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Agency' }
-
-  /api/v2/agencies/{id}/rotate-key:
-    post:
-      tags: [Agencies (admin)]
-      security: [{ bearerAuth: [] }]
-      summary: API-Key rotieren
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: ok
-
-  /api/v2/agencies/{id}:
-    delete:
-      tags: [Agencies (admin)]
-      security: [{ bearerAuth: [] }]
-      summary: Agency löschen/deaktivieren
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
+        content: { application/json: { schema: { type: object, required: [email], properties: { profileUrl: {type: string}, email: {type: string}, name: {type: string}, birthdate: {type: string}, address: {type: string}, jobId: {type: string} } } } }
       responses:
         '200': { description: ok }
 
-  /api/agency/jobs:
-    get:
-      tags: [Agency API (partner)]
-      security: [{ agencyKey: [] }]
-      summary: Jobs für Partner
-      responses:
-        '200':
-          description: Liste
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  allOf:
-                    - $ref: '#/components/schemas/JobPublic'
-                    - type: object
-                      properties:
-                        linkedinPostId: { type: string, nullable: true }
-
-  /api/agency/applications:
-    get:
-      tags: [Agency API (partner)]
-      security: [{ agencyKey: [] }]
-      summary: Bewerbungen (optional gefiltert)
-      parameters:
-        - in: query
-          name: jobId
-          required: false
-          schema: { type: string }
-      responses:
-        '200':
-          description: Liste kompakt
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id: { type: string }
-                    status: { type: string }
-                    applicant:
-                      type: object
-                      properties:
-                        email: { type: string }
-                    createdAt: { type: string, format: date-time }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }

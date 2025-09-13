@@ -6,7 +6,7 @@ import { toIsoLocal } from "../lib/date";
 export default function Meetings({ token, role }: { token: string; role: string }) {
   const [list, setList] = useState<Meeting[]>([]);
   const [jobId, setJobId] = useState("");
-  const [starts, setStarts] = useState(""); // datetime-local
+  const [starts, setStarts] = useState("");
   const [ends, setEnds] = useState("");
   const [mode, setMode] = useState("online");
   const [loc, setLoc] = useState("");
@@ -21,16 +21,11 @@ export default function Meetings({ token, role }: { token: string; role: string 
 
   async function propose() {
     try {
-      const body:any = {
-        jobId, startsAt: toIsoLocal(starts), endsAt: toIsoLocal(ends),
-        mode, location: loc || (mode==="online" ? "Teams-Link folgt" : "")
-      };
+      const body:any = { jobId, startsAt: toIsoLocal(starts), endsAt: toIsoLocal(ends), mode, location: loc || (mode==="online" ? "Teams-Link folgt" : "") };
       const res = await API.post<any>(apiUrl("/v2/meetings"), body, token);
       alert("Meeting vorgeschlagen: " + res.id);
       await load();
-    } catch (e:any) {
-      alert("Fehler: " + e?.message);
-    }
+    } catch (e:any) { alert("Fehler: " + e?.message); }
   }
 
   return (
@@ -41,15 +36,9 @@ export default function Meetings({ token, role }: { token: string; role: string 
           <div className="space-y-3">
             {list.map(m => (
               <div key={m.id} className="rounded-xl border border-slate-200 p-3">
-                <div className="flex justify-between">
-                  <div>
-                    <div className="font-medium">{m.job?.title}</div>
-                    <div className="text-sm text-slate-600">
-                      {new Date(m.startsAt).toLocaleString()} – {new Date(m.endsAt).toLocaleString()}
-                    </div>
-                    <div className="text-xs text-slate-500">Status: {m.status} · Modus: {m.mode} · Ort: {m.location}</div>
-                  </div>
-                </div>
+                <div className="font-medium">{m.job?.title}</div>
+                <div className="text-sm text-slate-600">{new Date(m.startsAt).toLocaleString()} – {new Date(m.endsAt).toLocaleString()}</div>
+                <div className="text-xs text-slate-500">Status: {m.status} · Modus: {m.mode} · Ort: {m.location}</div>
               </div>
             ))}
             {list.length===0 && <div className="text-sm text-slate-500">Keine Meetings.</div>}
