@@ -1,11 +1,8 @@
 import express from 'express';
 import { ObjectId } from 'mongodb';
+import { requireAuth, requireRole } from '../../lib/auth.js';
 
 const router = express.Router();
-
-const requireAuth = (req, res, next) => req.user ? next() : res.status(401).json({ error: 'Missing token' });
-const requireRole = (...roles) => (req, res, next) =>
-  (req.user && roles.includes(req.user.role)) ? next() : res.status(403).json({ error: 'Forbidden' });
 
 // Get database connection
 function getDb() {
