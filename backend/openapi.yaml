@@ -1,187 +1,109 @@
 openapi: 3.0.3
-info:
-  title: Chocadies Recruiting API
-  version: "2.1.0"
-servers:
-  - url: /
+info: { title: Chocadies Recruiting API, version: "2.2.0" }
+servers: [{ url: / }]
 paths:
-  /api/health:
-    get:
-      summary: Healthcheck
-      responses:
-        '200': { description: ok }
-
+  /api/health: { get: { summary: Health, responses: { '200': { description: ok } } } }
   /api/auth/login:
     post:
       summary: Login (JWT)
-      requestBody:
-        required: true
-        content: { application/json: { schema: { type: object, required: [email, password], properties: { email: {type: string}, password: {type: string} } } } }
-      responses:
-        '200': { description: token }
-
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email,password], properties: { email: {type: string}, password: {type: string} } } } } }
+      responses: { '200': { description: ok } }
   /api/public/register:
     post:
       summary: Applicant registrieren
-      requestBody:
-        required: true
-        content: { application/json: { schema: { type: object, required: [email, password], properties: { email: {type: string}, password: {type: string}, birthdate: {type: string}, address: {type: string} } } } }
-      responses:
-        '200': { description: ok }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email,password], properties: { email:{type:string}, password:{type:string}, name:{type:string}, birthdate:{type:string}, address:{type:string} } } } } }
+      responses: { '200': { description: ok } }
+  /api/public/jobs: { get: { summary: Öffentliche Jobs, responses: { '200': { description: ok } } } }
 
-  /api/public/jobs:
-    get:
-      summary: Öffentliche Jobs
-      responses:
-        '200': { description: Liste }
+  /api/v2/me/profile: { get: { summary: Mein Profil (Applicant), security: [{ bearerAuth: [] }], responses: { '200': { description: ok } } } }
+  /api/v2/me:
+    patch:
+      summary: Profil aktualisieren (Applicant)
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { email:{type:string}, name:{type:string}, birthdate:{type:string}, address:{type:string} } } } } }
+      responses: { '200': { description: ok } }
+  /api/v2/me/delete-request: { post: { summary: Löschantrag in 30 Tagen, security: [{ bearerAuth: [] }], responses: { '200': { description: ok } } } }
+  /api/v2/me/cv:
+    get: { summary: Eigene CVs, security: [{ bearerAuth: [] }], responses: { '200': { description: ok } } }
+    post:
+      summary: CV hochladen (multipart/form-data, Feld "file")
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: created } }
+  /api/v2/me/cv/{fileId}:
+    get: { summary: Eigenes CV anzeigen, security: [{ bearerAuth: [] }], parameters:[{in:path,name:fileId,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
+    delete: { summary: Eigenes CV löschen, security: [{ bearerAuth: [] }], parameters:[{in:path,name:fileId,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
 
   /api/v2/jobs:
-    get:
-      summary: Jobs (HR)
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200': { description: ok }
+    get: { summary: Jobs (HR), security: [{ bearerAuth: [] }], responses: { '200': { description: ok } } }
     post:
       summary: Job anlegen (HR)
       security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content: { application/json: { schema: { type: object, required: [title], properties: { title: {type: string}, description: {type: string}, open: {type: boolean} } } } }
-      responses:
-        '200': { description: ok }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required:[title], properties: { title:{type:string}, description:{type:string}, open:{type:boolean} } } } } }
+      responses: { '200': { description: ok } }
 
   /api/v2/applications:
     get:
-      summary: Bewerbungen (HR) – optional nach jobId filtern, sonst alle
+      summary: Bewerbungen (HR) – erfordert jobId
+      parameters: [{ in: query, name: jobId, schema:{type:string} }]
       security: [{ bearerAuth: [] }]
-      parameters:
-        - in: query
-          name: jobId
-          schema: { type: string }
-      responses:
-        '200': { description: Liste }
+      responses: { '200': { description: ok } }
     post:
-      summary: Bewerbung absenden (Applicant, inkl. optionale Notiz)
+      summary: Bewerbung absenden (Applicant)
       security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content: { application/json: { schema: { type: object, required: [jobId], properties: { jobId: {type: string}, note: {type: string} } } } }
-      responses:
-        '201': { description: erstellt }
-
-  /api/v2/applications/me:
-    get:
-      summary: Meine Bewerbungen (Applicant)
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200': { description: Liste }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required:[jobId], properties: { jobId:{type:string}, note:{type:string}, cvFileId:{type:string} } } } } }
+      responses: { '201': { description: created } }
+  /api/v2/applications/me: { get: { summary: Meine Bewerbungen, security: [{ bearerAuth: [] }], responses: { '200': { description: ok } } } }
+  /api/v2/applications/{id}:
+    patch: { summary: Status setzen (HR), security: [{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
+    delete: { summary: Bewerbung löschen (HR), security: [{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
+  /api/v2/applications/{id}/withdraw:
+    patch: { summary: Bewerbung zurückziehen (Applicant), security:[{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
 
   /api/v2/meetings:
     get:
       summary: Meetings (HR) – optional jobId
       security: [{ bearerAuth: [] }]
-      parameters:
-        - in: query
-          name: jobId
-          schema: { type: string }
-      responses:
-        '200': { description: Liste }
+      parameters: [{ in: query, name: jobId, schema:{type:string} }]
+      responses: { '200': { description: ok } }
     post:
       summary: Meeting anlegen (Applicant Vorschlag / HR mit applicantEmail)
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [jobId, startsAt, endsAt]
-              properties:
-                jobId: { type: string }
-                startsAt: { type: string, format: date-time }
-                endsAt: { type: string, format: date-time }
-                mode: { type: string, enum: [online, onsite] }
-                location: { type: string }
-                applicantEmail: { type: string, description: "Nur HR" }
-      responses:
-        '200': { description: ok }
+        content: { application/json: { schema: { type: object, required:[jobId,startsAt,endsAt], properties: { jobId:{type:string}, startsAt:{type:string,format:date-time}, endsAt:{type:string,format:date-time}, mode:{type:string}, location:{type:string}, applicantEmail:{type:string} } } } }
+      responses: { '200': { description: ok } }
 
   /api/v2/users:
-    get:
-      summary: Benutzerliste (Admin)
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200': { description: ok }
+    get: { summary: Benutzerliste (Admin), security: [{ bearerAuth: [] }], responses: { '200': { description: ok } } }
     post:
       summary: Benutzer anlegen (Admin)
       security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content: { application/json: { schema: { type: object, required: [email, password, role], properties: { email: {type: string}, password: {type: string}, role: {type: string, enum: [admin, hr, applicant]} } } } }
-      responses:
-        '201': { description: ok }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required:[email,password,role], properties: { email:{type:string}, password:{type:string}, role:{type:string} } } } } }
+      responses: { '201': { description: created } }
+  /api/v2/users/{id}:
+    patch: { summary: Benutzer ändern (Admin), security: [{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
+    delete: { summary: Benutzer löschen (Admin), security: [{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
+  /api/v2/users/{id}/cv:
+    get: { summary: CVs eines Bewerbers (HR), security: [{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
+  /api/v2/users/{id}/cv/{fileId}:
+    get: { summary: CV anzeigen (HR), security: [{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}},{in:path,name:fileId,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } }
 
   /api/v2/agencies:
-    get:
-      summary: Agencies auflisten (Admin)
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200': { description: ok }
+    get: { summary: Agencies (Admin), security: [{ bearerAuth: [] }], responses: { '200': { description: ok } } }
     post:
-      summary: Agency anlegen (Admin) – gibt API-Key zurück
+      summary: Agency anlegen (Admin)
       security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content: { application/json: { schema: { type: object, required: [name], properties: { name: {type: string} } } } }
-      responses:
-        '200': { description: ok }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required:[name], properties: { name:{type:string} } } } } }
+      responses: { '200': { description: ok } }
+  /api/v2/agencies/{id}/rotate-key: { post: { summary: Key rotieren (Admin), security: [{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } } }
+  /api/v2/agencies/{id}: { delete: { summary: Agency löschen (Admin), security: [{ bearerAuth: [] }], parameters:[{in:path,name:id,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } } }
 
-  /api/v2/agencies/{id}/rotate-key:
-    post:
-      summary: Agency-Key rotieren (Admin)
-      security: [{ bearerAuth: [] }]
-      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
-      responses:
-        '200': { description: ok }
-
-  /api/v2/agencies/{id}:
-    delete:
-      summary: Agency löschen (Admin)
-      security: [{ bearerAuth: [] }]
-      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
-      responses:
-        '200': { description: ok }
-
-  /api/agency/jobs:
-    get:
-      summary: Partner-API – Jobs (per x-api-key)
-      parameters: [{ in: header, name: x-api-key, required: true, schema: { type: string } }]
-      responses:
-        '200': { description: ok }
-
+  /api/agency/jobs: { get: { summary: Partner-API Jobs, parameters:[{in:header,name:x-api-key,required:true,schema:{type:string}}], responses:{ '200':{description: ok} } } }
   /api/agency/applications:
     get:
-      summary: Partner-API – Bewerbungen (per x-api-key)
-      parameters:
-        - in: header
-          name: x-api-key
-          required: true
-          schema: { type: string }
-        - in: query
-          name: jobId
-          schema: { type: string }
-      responses:
-        '200': { description: ok }
-
-  /api/v2/linkedin/import-applicant:
-    post:
-      summary: (Dummy) Kandidaten aus LinkedIn importieren (HR)
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content: { application/json: { schema: { type: object, required: [email], properties: { profileUrl: {type: string}, email: {type: string}, name: {type: string}, birthdate: {type: string}, address: {type: string}, jobId: {type: string} } } } }
-      responses:
-        '200': { description: ok }
+      summary: Partner-API Bewerbungen
+      parameters:[{in:header,name:x-api-key,required:true,schema:{type:string}},{in:query,name:jobId,schema:{type:string}}]
+      responses:{ '200':{description: ok} }
 
 components:
   securitySchemes:

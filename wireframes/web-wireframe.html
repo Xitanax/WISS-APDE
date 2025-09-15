@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chocadies Web-App Wireframes</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .wireframe { background: white; border: 2px solid #333; margin: 20px 0; padding: 20px; }
+        .header { border: 1px solid #666; padding: 10px; background: #eee; }
+        .nav { display: flex; gap: 10px; border: 1px solid #666; padding: 5px; }
+        .nav-item { border: 1px solid #999; padding: 5px 10px; background: #ddd; }
+        .content { border: 1px solid #666; padding: 15px; margin-top: 10px; min-height: 300px; }
+        .card { border: 1px dashed #999; padding: 10px; margin: 10px 0; background: #f9f9f9; }
+        .button { border: 1px solid #333; padding: 5px 10px; background: #ddd; display: inline-block; }
+        .form-field { border: 1px solid #999; padding: 5px; margin: 5px 0; background: #fff; }
+        h3 { margin: 0; color: #333; }
+    </style>
+</head>
+<body>
+    <h1>Chocadies Recruiting Platform - Web-App Wireframes</h1>
+    
+    <div class="wireframe">
+        <h3>1. Jobs Page (Öffentlich)</h3>
+        <div class="header">
+            <strong>🍫 Chocadies</strong>
+            <div style="float: right;">[Login Button]</div>
+        </div>
+        <div class="nav">
+            <div class="nav-item">Jobs</div>
+        </div>
+        <div class="content">
+            <h2>Offene Stellen</h2>
+            <p>Finde deinen Platz in der süßesten Manufaktur der Welt.</p>
+            <div class="card">
+                <h4>QA Engineer [NEU]</h4>
+                <p>Tests und Qualitätssicherung</p>
+                <div class="button">Einloggen zum Bewerben</div>
+            </div>
+            <div class="card">
+                <h4>Chocolatier (m/w/d)</h4>
+                <p>Feinste Pralinen herstellen</p>
+                <div class="button">Einloggen zum Bewerben</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="wireframe">
+        <h3>2. HR Bereich</h3>
+        <div class="header">
+            <strong>🍫 Chocadies</strong>
+            <div style="float: right;">hr@chocadies.local [Logout]</div>
+        </div>
+        <div class="nav">
+            <div class="nav-item">Jobs</div>
+            <div class="nav-item"><strong>HR</strong></div>
+        </div>
+        <div class="content">
+            <h2>HR Bereich</h2>
+            <div class="card">
+                <h4>Job auswählen</h4>
+                <div class="form-field">[Dropdown: QA Engineer]</div>
+                <div class="form-field">Titel: QA Engineer</div>
+                <div class="form-field">Status: [Dropdown: Offen]</div>
+                <div class="form-field">Beschreibung: [Textarea]</div>
+                <div class="button">Speichern</div>
+            </div>
+            <div class="card">
+                <h4>Bewerbungen</h4>
+                <div style="border: 1px solid #ccc; padding: 10px;">
+                    <strong>bob@app.local</strong> - Status: Eingegangen
+                    <div class="button">Screening</div>
+                    <div class="button">Einladen</div>
+                    <div class="button">Ablehnen</div>
+                </div>
+            </div>
+            <div class="card">
+                <h4>Meetings planen</h4>
+                <div class="form-field">Datum: [Date Input]</div>
+                <div class="form-field">Zeit: [Time Input]</div>
+                <div class="form-field">Applicant: [Email Input]</div>
+                <div class="button">Meeting anlegen</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="wireframe">
+        <h3>3. Admin Bereich</h3>
+        <div class="header">
+            <strong>🍫 Chocadies</strong>
+            <div style="float: right;">admin@chocadies.local [Logout]</div>
+        </div>
+        <div class="nav">
+            <div class="nav-item">Jobs</div>
+            <div class="nav-item"><strong>Admin</strong></div>
+        </div>
+        <div class="content">
+            <h2>Administration</h2>
+            <div class="card">
+                <h4>Benutzer verwalten</h4>
+                <div style="border: 1px solid #ccc; padding: 5px;">
+                    <strong>E-Mail | Rolle | Aktionen</strong>
+                </div>
+                <div style="border: 1px solid #ccc; padding: 5px;">
+                    hr@chocadies.local | HR | [Edit] [Delete]
+                </div>
+                <div class="button">+ Neuer Benutzer</div>
+            </div>
+            <div class="card">
+                <h4>Partner API-Keys</h4>
+                <div style="border: 1px solid #ccc; padding: 10px;">
+                    <strong>TalentBridge GmbH</strong><br>
+                    Key: abc123... [Copy]<br>
+                    Berechtigungen: jobs:read, applications:read
+                    <div class="button">Key rotieren</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="wireframe">
+        <h3>4. Applicant - Mein Bereich</h3>
+        <div class="header">
+            <strong>🍫 Chocadies</strong>
+            <div style="float: right;">bewerber@example.com [Logout]</div>
+        </div>
+        <div class="nav">
+            <div class="nav-item">Jobs</div>
+            <div class="nav-item"><strong>Mein Bereich</strong></div>
+        </div>
+        <div class="content">
+            <h2>Mein Bereich</h2>
+            <div class="card">
+                <h4>🙋 Persönliche Informationen</h4>
+                <div class="form-field">Name: [Input]</div>
+                <div class="form-field">Geburtsdatum: [Date]</div>
+                <div class="form-field">Adresse: [Input]</div>
+                <div class="button">Bearbeiten</div>
+            </div>
+            <div class="card">
+                <h4>📄 Lebensläufe</h4>
+                <div class="button">+ CV hochladen</div>
+                <div style="border: 1px solid #ccc; padding: 5px;">
+                    📄 Lebenslauf_2024.pdf [Download] [Delete]
+                </div>
+            </div>
+            <div class="card">
+                <h4>💼 Meine Bewerbungen</h4>
+                <div style="border: 1px solid #ccc; padding: 5px;">
+                    <strong>QA Engineer</strong> - Status: In Prüfung<br>
+                    Eingereicht: 12.09.2024
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="wireframe">
+        <h3>5. Bewerbungs-Modal</h3>
+        <div style="border: 3px solid #333; padding: 20px; background: #f0f0f0; width: 400px; margin: 20px auto;">
+            <h4>Bewerbung für QA Engineer</h4>
+            <div class="form-field">
+                <strong>Anschreiben / Notiz:</strong><br>
+                [Textarea: "Warum sind Sie der richtige Kandidat?"]
+            </div>
+            <div class="form-field">
+                <strong>Lebenslauf:</strong><br>
+                ○ Vorhandene CVs:<br>
+                ☑️ Lebenslauf_2024.pdf<br>
+                <br>
+                [Datei-Upload Bereich]<br>
+                📁 Neuen CV hochladen (PDF)
+            </div>
+            <div style="margin-top: 20px;">
+                <div class="button">Abbrechen</div>
+                <div class="button" style="background: #007bff; color: white;">Bewerbung absenden</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chocadies Mobile-App Wireframes</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .phone { width: 300px; height: 600px; border: 3px solid #333; border-radius: 20px; background: white; margin: 20px; padding: 10px; display: inline-block; vertical-align: top; }
+        .status-bar { height: 20px; background: #eee; border-radius: 5px; margin-bottom: 10px; text-align: center; font-size: 12px; line-height: 20px; }
+        .header { background: #1e293b; color: white; padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+        .nav-tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 10px; }
+        .nav-tab { flex: 1; padding: 10px; text-align: center; border: 1px solid #ddd; background: #f0f0f0; }
+        .nav-tab.active { background: #007bff; color: white; }
+        .content { padding: 10px; }
+        .job-card { border: 1px solid #ddd; border-radius: 5px; padding: 10px; margin: 10px 0; background: #f9f9f9; }
+        .button { background: #007bff; color: white; padding: 8px 15px; border: none; border-radius: 5px; margin: 5px 0; }
+        .form-field { border: 1px solid #ccc; padding: 8px; margin: 8px 0; border-radius: 3px; }
+        h4 { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>Chocadies Mobile-App Wireframes (iOS/Android)</h1>
+    
+    <div class="phone">
+        <div class="status-bar">📶 9:41 AM 🔋</div>
+        <div class="header">
+            <strong>🍫 Chocadies</strong>
+            <span style="float: right;">Login</span>
+        </div>
+        <div class="nav-tabs">
+            <div class="nav-tab active">Jobs</div>
+        </div>
+        <div class="content">
+            <h3>Offene Stellen</h3>
+            <div class="job-card">
+                <h4>QA Engineer <span style="background: blue; color: white; padding: 2px 5px; border-radius: 3px; font-size: 10px;">NEU</span></h4>
+                <p style="font-size: 12px;">Tests und Qualitätssicherung</p>
+                <button class="button">Einloggen zum Bewerben</button>
+            </div>
+            <div class="job-card">
+                <h4>Chocolatier (m/w/d)</h4>
+                <p style="font-size: 12px;">Feinste Pralinen herstellen</p>
+                <button class="button">Einloggen zum Bewerben</button>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 20px; font-weight: bold;">1. Jobs (Nicht angemeldet)</div>
+    </div>
+
+    <div class="phone">
+        <div class="status-bar">📶 9:41 AM 🔋</div>
+        <div class="header">
+            <strong>🍫 Chocadies</strong>
+            <span style="float: right; font-size: 10px;">bewerber@app.com</span>
+        </div>
+        <div class="nav-tabs">
+            <div class="nav-tab active">Jobs</div>
+            <div class="nav-tab">Mein Bereich</div>
+        </div>
+        <div class="content">
+            <div class="job-card">
+                <h4>QA Engineer</h4>
+                <p style="font-size: 12px;">Tests und Qualitätssicherung</p>
+                <button class="button">Bewerben</button>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 20px; font-weight: bold;">2. Jobs (Angemeldet)</div>
+    </div>
+
+    <div class="phone">
+        <div class="status-bar">📶 9:41 AM 🔋</div>
+        <div class="header">
+            <strong>🍫 Chocadies</strong>
+            <span style="float: right; font-size: 10px;">bewerber@app.com</span>
+        </div>
+        <div class="nav-tabs">
+            <div class="nav-tab">Jobs</div>
+            <div class="nav-tab active">Mein Bereich</div>
+        </div>
+        <div class="content">
+            <div style="border: 1px solid #ddd; padding: 8px; margin: 5px 0; border-radius: 5px;">
+                <strong>🙋 Profil</strong>
+                <p style="font-size: 11px; margin: 5px 0;">Name, Adresse bearbeiten</p>
+            </div>
+            <div style="border: 1px solid #ddd; padding: 8px; margin: 5px 0; border-radius: 5px;">
+                <strong>📄 CVs</strong>
+                <p style="font-size: 11px; margin: 5px 0;">Lebensläufe verwalten</p>
+            </div>
+            <div style="border: 1px solid #ddd; padding: 8px; margin: 5px 0; border-radius: 5px;">
+                <strong>💼 Bewerbungen</strong>
+                <p style="font-size: 11px; margin: 5px 0;">QA Engineer - In Prüfung</p>
+            </div>
+            <div style="border: 1px solid #ddd; padding: 8px; margin: 5px 0; border-radius: 5px;">
+                <strong>📅 Termine</strong>
+                <p style="font-size: 11px; margin: 5px 0;">Interview am 15.09. 10:00</p>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 20px; font-weight: bold;">3. Mein Bereich</div>
+    </div>
+
+    <div class="phone">
+        <div class="status-bar">📶 9:41 AM 🔋</div>
+        <div class="header">
+            <strong>Bewerbung</strong>
+            <span style="float: right;">✕</span>
+        </div>
+        <div class="content">
+            <h4>QA Engineer</h4>
+            <div class="form-field" style="height: 60px; background: #f9f9f9;">
+                [Anschreiben eingeben...]
+            </div>
+            <p style="font-size: 12px; margin: 10px 0;"><strong>Lebenslauf:</strong></p>
+            <div style="border: 1px dashed #ccc; padding: 20px; text-align: center; border-radius: 5px;">
+                📄<br>
+                <span style="font-size: 12px;">CV auswählen oder hochladen</span>
+            </div>
+            <button class="button" style="width: 100%; margin-top: 20px;">Bewerbung absenden</button>
+        </div>
+        <div style="text-align: center; margin-top: 20px; font-weight: bold;">4. Bewerbungs-Dialog</div>
+    </div>
+
+    <div class="phone">
+        <div class="status-bar">📶 9:41 AM 🔋</div>
+        <div class="header">
+            <strong>Meeting-Auswahl</strong>
+        </div>
+        <div class="content">
+            <h4>Interview für QA Engineer</h4>
+            <p style="font-size: 12px;">Bitte wählen Sie einen Termin:</p>
+            
+            <div style="border: 1px solid #ddd; padding: 10px; margin: 8px 0; border-radius: 5px; background: #f0f8ff;">
+                <div style="font-weight: bold;">15. Sept, 10:00-10:30</div>
+                <div style="font-size: 11px; color: #666;">Online Meeting</div>
+                <button style="background: #28a745; color: white; padding: 5px 10px; border: none; border-radius: 3px; margin-top: 5px;">Auswählen</button>
+            </div>
+            
+            <div style="border: 1px solid #ddd; padding: 10px; margin: 8px 0; border-radius: 5px;">
+                <div style="font-weight: bold;">16. Sept, 14:00-14:30</div>
+                <div style="font-size: 11px; color: #666;">Vor Ort - Zürich HQ</div>
+                <button style="background: #007bff; color: white; padding: 5px 10px; border: none; border-radius: 3px; margin-top: 5px;">Auswählen</button>
+            </div>
+            
+            <div style="border: 1px solid #ddd; padding: 10px; margin: 8px 0; border-radius: 5px;">
+                <div style="font-weight: bold;">17. Sept, 09:00-09:30</div>
+                <div style="font-size: 11px; color: #666;">Telefon-Interview</div>
+                <button style="background: #007bff; color: white; padding: 5px 10px; border: none; border-radius: 3px; margin-top: 5px;">Auswählen</button>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 20px; font-weight: bold;">5. Meeting-Terminauswahl</div>
+    </div>
+</body>
+</html>

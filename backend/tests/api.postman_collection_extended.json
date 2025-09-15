@@ -1,0 +1,136 @@
+{
+  "info": {
+    "name": "Chocadies API - Vollständige Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "CRUD Tests",
+      "item": [
+        {
+          "name": "Create Job (HR)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                "pm.test('Hat ID', () => pm.expect(pm.response.json()).to.have.property('id'));",
+                "pm.environment.set('jobId', pm.response.json().id);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"QA Engineer\",\"description\":\"Testing position\",\"open\":true}"
+            },
+            "url": "{{baseUrl}}/api/v2/jobs"
+          }
+        },
+        {
+          "name": "Read Job",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('Array von Jobs', () => pm.expect(pm.response.json()).to.be.an('array'));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{baseUrl}}/api/v2/jobs"
+          }
+        },
+        {
+          "name": "Update Job",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('OK Response', () => pm.expect(pm.response.json().ok).to.be.true);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"description\":\"Updated description\"}"
+            },
+            "url": "{{baseUrl}}/api/v2/jobs/{{jobId}}"
+          }
+        },
+        {
+          "name": "Delete Job",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('OK Response', () => pm.expect(pm.response.json().ok).to.be.true);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{baseUrl}}/api/v2/jobs/{{jobId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Security Tests",
+      "item": [
+        {
+          "name": "Unauthorized Access",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 401 ohne Token', () => pm.response.to.have.status(401));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v2/jobs"
+          }
+        },
+        {
+          "name": "Invalid Token",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 401 mit ungültigem Token', () => pm.response.to.have.status(401));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer invalid.token.here"}],
+            "url": "{{baseUrl}}/api/v2/jobs"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:3000"},
+    {"key": "token", "value": ""}
+  ]
+}

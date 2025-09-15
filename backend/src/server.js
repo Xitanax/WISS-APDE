@@ -1,439 +1,873 @@
-// backend/src/server.js
-// Rollen:
-// - admin: User-Management + Agencies (externe Partner, API-Key)
-// - hr:    Jobs, Applications, Meetings, LinkedIn-Dummy
-// - applicant: Bewerben, eigene Bewerbungen/Meetings
 import express from "express";
+import cors from "cors";
 import helmet from "helmet";
+import morgan from "morgan";
+import cookieParser from "cookie-parser";
+import { MongoClient, ObjectId } from "mongodb";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { MongoClient, ObjectId } from "mongodb";
-import { randomBytes } from "node:crypto";
+import multer from "multer";
+import path from "path";
+import { fileURLToPath } from "url";
 import { mountApiDocs } from "./apiDocs.js";
+import meetingsRouter from "./routes/v2/meetings.js";
+import applicationsRouter from "./routes/v2/applications.js";
 
-const PORT = Number(process.env.PORT || 3000);
-const MONGO_URL = process.env.MONGO_URL || "mongodb://mongo:27017/chocadies";
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
-const JWT_EXPIRES = process.env.JWT_EXPIRES || "1d";
-const BOOTSTRAP_SECRET = process.env.BOOTSTRAP_SECRET || "my-super-secret";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-app.set("x-powered-by", false);
+const PORT = process.env.PORT || 3000;
+const MONGO_URL = process.env.MONGO_URL || "mongodb://localhost:27017/chocadies";
+const JWT_SECRET = process.env.JWT_SECRET || "devsecret";
+
+let db;
+
+// Middleware
+app.use(helmet());
+app.use(cors({ origin: true, credentials: true }));
+app.use(morgan("combined"));
 app.use(express.json());
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: false,
-      directives: {
-        "default-src": ["'self'"],
-        "base-uri": ["'self'"],
-        "font-src": ["'self'", "https:", "data:"],
-        "form-action": ["'self'"],
-        "frame-ancestors": ["'self'"],
-        "img-src": ["'self'", "data:"],
-        "object-src": ["'none'"],
-        "script-src": ["'self'"],
-        "script-src-attr": ["'none'"],
-        "style-src": ["'self'", "https:", "'unsafe-inline'"],
-        "upgrade-insecure-requests": [],
-      },
-    },
-    referrerPolicy: { policy: "no-referrer" },
-    crossOriginOpenerPolicy: { policy: "same-origin" },
-    crossOriginResourcePolicy: { policy: "same-origin" },
-    dnsPrefetchControl: { allow: false },
-    frameguard: { action: "sameorigin" },
-    xssFilter: false,
-    hsts: { maxAge: 15552000, includeSubDomains: true },
-  })
-);
-app.use((_req, res, next) => { res.setHeader("Vary", "Origin"); res.setHeader("Access-Control-Allow-Credentials", "true"); next(); });
+app.use(cookieParser());
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-const client = new MongoClient(MONGO_URL);
-let db, Users, Jobs, Applications, Meetings, Agencies;
+// File upload
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '../uploads/'));
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
 
-async function initDb() {
-  await client.connect();
-  db = client.db();
-  Users = db.collection("users");
-  Jobs = db.collection("jobs");
-  Applications = db.collection("applications");
-  Meetings = db.collection("meetings");
-  Agencies = db.collection("agencies");
+const upload = multer({ 
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files allowed'), false);
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
-  await Users.createIndex({ email: 1 }, { unique: true, background: true });
-  await Users.createIndex({ role: 1 }, { background: true });
-
-  await Jobs.createIndex({ open: 1 }, { background: true });
-
-  await Applications.createIndex({ job: 1 }, { background: true });
-  await Applications.createIndex({ user: 1 }, { background: true });
-  await Applications.createIndex({ status: 1 }, { background: true });
-  await Applications.createIndex({ deleteAt: 1 }, { background: true, partialFilterExpression: { deleteAt: { $exists: true } }, expireAfterSeconds: 0 });
-  await Applications.createIndex({ job: 1, user: 1 }, { unique: true });
-  await Applications.createIndex({ note: "text" }, { background: true });
-
-  await Meetings.createIndex({ job: 1 }, { background: true });
-  await Meetings.createIndex({ user: 1 }, { background: true });
-  await Meetings.createIndex({ status: 1 }, { background: true });
-
-  await Agencies.createIndex({ apiKey: 1 }, { unique: true, background: true });
-
-  console.log("[mongo] connected");
+// Auth middleware
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Missing token' });
+  }
+  
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
 }
 
-function signToken(payload) { return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES }); }
-function authRequired(req, res, next) {
-  const h = req.headers.authorization || "";
-  const m = h.match(/^Bearer\s+(.+)$/i);
-  if (!m) return res.status(401).json({ error: "Missing token" });
-  try { req.user = jwt.verify(m[1], JWT_SECRET); next(); } catch { return res.status(401).json({ error: "Invalid token" }); }
-}
-function requireRole(role) {
+function requireRole(...roles) {
   return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: "Missing token" });
-    if (req.user.role !== role) return res.status(403).json({ error: "forbidden" });
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     next();
   };
 }
-async function findUserByEmail(email) { if (!email) return null; return await Users.findOne({ email: String(email).toLowerCase() }); }
-async function ensureApplicant(email, { name, birthdate, address } = {}) {
-  const norm = String(email).toLowerCase();
-  let user = await Users.findOne({ email: norm });
-  if (!user) {
-    const passwordHash = await bcrypt.hash("imported", 10);
-    const doc = { email: norm, role: "applicant", passwordHash, name: name || null, birthdate: birthdate ? new Date(birthdate) : null, address: address || null, createdAt: new Date(), updatedAt: new Date() };
-    const r = await Users.insertOne(doc); user = { ...doc, _id: r.insertedId };
+
+// Connect to MongoDB
+async function connectDB() {
+  try {
+    const client = new MongoClient(MONGO_URL);
+    await client.connect();
+    db = client.db();
+    global.db = db;
+    console.log('Connected to MongoDB');
+    
+    // Create indexes
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+    await db.collection('agencies').createIndex({ apiKey: 1 }, { unique: true });
+  } catch (error) {
+    console.error('MongoDB connection failed:', error);
+    process.exit(1);
   }
-  return user;
 }
-function randKey(bytes = 24) { return randomBytes(bytes).toString("hex"); }
 
-app.get("/", (_req, res) => res.redirect(302, "/api/docs"));
-app.get("/api/health", (_req, res) => res.json("ok"));
+// Health check
+app.get('/api/health', (req, res) => {
+  res.send('ok');
+});
 
-// Auth & Register
-app.post("/api/public/register", async (req, res) => {
+// Authentication routes
+app.post('/api/auth/bootstrap-admin', async (req, res) => {
   try {
-    const { email, password, birthdate, address } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "missing_fields" });
-    const existing = await findUserByEmail(email);
-    if (existing) return res.status(400).json({ error: "email already registered" });
+    const secret = req.header('x-bootstrap-secret');
+    if (!secret || secret !== process.env.BOOTSTRAP_SECRET) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const email = process.env.ADMIN_EMAIL || 'admin@chocadies.ch';
+    const password = process.env.ADMIN_PASSWORD || 'secret123';
+
+    let existing = await db.collection('users').findOne({ email });
+    if (existing) {
+      return res.status(200).json({
+        ok: true,
+        user: { id: existing._id, email: existing.email, role: existing.role }
+      });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
-    const doc = { email: String(email).toLowerCase(), role: "applicant", passwordHash, birthdate: birthdate ? new Date(birthdate) : null, address: address || null, createdAt: new Date(), updatedAt: new Date() };
-    const r = await Users.insertOne(doc);
-    return res.json({ ok: true, id: r.insertedId.toString() });
-  } catch (e) { console.error("register", e); return res.status(500).json({ error: "server_error" }); }
+    const result = await db.collection('users').insertOne({ 
+      email, 
+      passwordHash, 
+      role: 'admin',
+      createdAt: new Date()
+    });
+    
+    return res.status(201).json({
+      ok: true,
+      user: { id: result.insertedId, email, role: 'admin' }
+    });
+  } catch (err) {
+    console.error('[bootstrap-admin] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
 });
-app.post("/api/auth/bootstrap-admin", async (req, res) => {
+
+app.post('/api/auth/login', async (req, res) => {
   try {
-    const secret = req.headers["x-bootstrap-secret"];
-    if (secret !== BOOTSTRAP_SECRET) return res.status(403).json({ error: "forbidden" });
     const { email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "missing_fields" });
-    let user = await findUserByEmail(email);
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    const user = await db.collection('users').findOne({ email: email.toLowerCase() });
     if (!user) {
-      const passwordHash = await bcrypt.hash(password, 10);
-      const doc = { email: String(email).toLowerCase(), role: "admin", passwordHash, createdAt: new Date(), updatedAt: new Date() };
-      const r = await Users.insertOne(doc); user = { ...doc, _id: r.insertedId };
-    } else if (user.role !== "admin") {
-      await Users.updateOne({ _id: user._id }, { $set: { role: "admin", updatedAt: new Date() } });
-      user.role = "admin";
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
-    return res.json({ ok: true, user: { id: user._id.toString(), email: user.email, role: user.role } });
-  } catch (e) { console.error("bootstrap-admin", e); return res.status(500).json({ error: "server_error" }); }
-});
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    const { email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "missing_fields" });
-    const user = await findUserByEmail(email);
-    if (!user || !user.passwordHash) return res.status(401).json({ error: "invalid_credentials" });
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: "invalid_credentials" });
-    const token = signToken({ email: user.email, role: user.role, uid: user._id.toString() });
-    return res.json({ token, email: user.email, role: user.role });
-  } catch (e) { console.error("login", e); return res.status(500).json({ error: "server_error" }); }
-});
-app.get("/api/auth/me", authRequired, (req, res) => res.json({ email: req.user.email, role: req.user.role }));
 
-// Öffentliche Jobs
-app.get("/api/public/jobs", async (_req, res) => {
-  const docs = await Jobs.find({ open: { $ne: false } }).sort({ _id: -1 }).toArray();
-  res.json(docs.map(j => ({ id: j._id.toString(), title: j.title, description: j.description })));
-});
-
-// Admin: Users
-app.get("/api/v2/users", authRequired, requireRole("admin"), async (_req, res) => {
-  const list = await Users.find({}, { projection: { passwordHash: 0 } }).sort({ _id: -1 }).toArray();
-  res.json(list.map(u => ({ id: u._id.toString(), email: u.email, role: u.role, name: u.name ?? null, birthdate: u.birthdate ?? null, address: u.address ?? null, createdAt: u.createdAt, updatedAt: u.updatedAt })));
-});
-app.post("/api/v2/users", authRequired, requireRole("admin"), async (req, res) => {
-  const { email, password, role, name, birthdate, address } = req.body || {};
-  if (!email || !password || !role) return res.status(400).json({ error: "missing_fields" });
-  if (!["admin","hr","applicant"].includes(role)) return res.status(400).json({ error: "invalid_role" });
-  const existing = await findUserByEmail(email);
-  if (existing) return res.status(400).json({ error: "email exists" });
-  const passwordHash = await bcrypt.hash(password, 10);
-  const doc = { email: String(email).toLowerCase(), role, passwordHash, name: name ?? null, birthdate: birthdate ? new Date(birthdate) : null, address: address ?? null, createdAt: new Date(), updatedAt: new Date() };
-  const r = await Users.insertOne(doc);
-  res.status(201).json({ ok: true, id: r.insertedId.toString() });
-});
-app.patch("/api/v2/users/:id", authRequired, requireRole("admin"), async (req, res) => {
-  const { role, password, name, birthdate, address } = req.body || {};
-  const patch = { updatedAt: new Date() };
-  if (role) { if (!["admin","hr","applicant"].includes(role)) return res.status(400).json({ error: "invalid_role" }); patch.role = role; }
-  if (password) patch.passwordHash = await bcrypt.hash(password, 10);
-  if (name !== undefined) patch.name = name;
-  if (birthdate !== undefined) patch.birthdate = birthdate ? new Date(birthdate) : null;
-  if (address !== undefined) patch.address = address;
-  const r = await Users.updateOne({ _id: new ObjectId(req.params.id) }, { $set: patch });
-  if (!r.matchedCount) return res.status(404).json({ error: "not_found" });
-  res.json({ ok: true });
-});
-app.delete("/api/v2/users/:id", authRequired, requireRole("admin"), async (req, res) => {
-  await Users.deleteOne({ _id: new ObjectId(req.params.id) });
-  res.json({ ok: true });
-});
-
-// HR: Jobs
-app.post("/api/v2/jobs", authRequired, requireRole("hr"), async (req, res) => {
-  const { title, description, open } = req.body || {};
-  if (!title) return res.status(400).json({ error: "missing_title" });
-  const doc = { title, description: description || "", open: open !== false, linkedinPostId: null, createdAt: new Date(), updatedAt: new Date() };
-  const r = await Jobs.insertOne(doc);
-  res.json({ id: r.insertedId.toString(), title: doc.title, description: doc.description, open: doc.open });
-});
-app.get("/api/v2/jobs", authRequired, requireRole("hr"), async (_req, res) => {
-  const docs = await Jobs.find({}).sort({ _id: -1 }).toArray();
-  res.json(docs);
-});
-app.patch("/api/v2/jobs/:id", authRequired, requireRole("hr"), async (req, res) => {
-  const patch = {};
-  ["title","description","open"].forEach(k => { if (req.body?.[k] !== undefined) patch[k] = req.body[k]; });
-  patch.updatedAt = new Date();
-  await Jobs.updateOne({ _id: new ObjectId(req.params.id) }, { $set: patch });
-  res.json({ ok: true });
-});
-app.delete("/api/v2/jobs/:id", authRequired, requireRole("hr"), async (req, res) => {
-  await Jobs.deleteOne({ _id: new ObjectId(req.params.id) });
-  res.json({ ok: true });
-});
-
-// Applications
-app.post("/api/v2/applications", authRequired, async (req, res) => {
-  try {
-    if (req.user.role !== "applicant") return res.status(403).json({ error: "forbidden" });
-    const { jobId, note } = req.body || {};
-    if (!jobId) return res.status(400).json({ error: "missing_jobId" });
-    const job = await Jobs.findOne({ _id: new ObjectId(jobId) });
-    if (!job || job.open === false) return res.status(404).json({ error: "job_not_found" });
-    const user = await findUserByEmail(req.user.email);
-    if (!user) return res.status(401).json({ error: "Invalid token" });
-    try {
-      const doc = { job: job._id, user: user._id, status: "submitted", note: note ? String(note) : null, createdAt: new Date(), updatedAt: new Date() };
-      const r = await Applications.insertOne(doc);
-      return res.status(201).json({ ok: true, id: r.insertedId.toString(), status: doc.status });
-    } catch (e) {
-      if (e?.code === 11000) return res.status(400).json({ error: "already_applied" });
-      throw e;
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
-  } catch (e) { console.error("applications:create", e); return res.status(500).json({ error: "server_error" }); }
-});
-app.get("/api/v2/applications/me", authRequired, async (req, res) => {
-  if (req.user.role !== "applicant") return res.status(403).json({ error: "forbidden" });
-  const me = await findUserByEmail(req.user.email);
-  const docs = await Applications.find({ user: me._id }).sort({ _id: -1 }).toArray();
-  const jobs = await Jobs.find({ _id: { $in: docs.map(a => a.job) } }).toArray();
-  const jMap = new Map(jobs.map(j => [j._id.toString(), j]));
-  const out = docs.map(a => ({
-    id: a._id.toString(),
-    status: a.status,
-    note: a.note ?? null,
-    job: (() => { const j = jMap.get(a.job.toString()); return j ? { id: j._id.toString(), title: j.title, description: j.description } : null; })(),
-    createdAt: a.createdAt,
-  }));
-  res.json(out);
-});
-app.get("/api/v2/applications", authRequired, requireRole("hr"), async (req, res) => {
-  const { jobId } = req.query;
-  const q = jobId ? { job: new ObjectId(String(jobId)) } : {};
-  const docs = await Applications.find(q).sort({ _id: -1 }).limit(200).toArray();
-  const userIds = docs.map(a => a.user);
-  const jobIds = docs.map(a => a.job);
-  const [users, jobs] = await Promise.all([
-    Users.find({ _id: { $in: userIds } }).toArray(),
-    Jobs.find({ _id: { $in: jobIds } }).toArray(),
-  ]);
-  const uMap = new Map(users.map(u => [u._id.toString(), u]));
-  const jMap = new Map(jobs.map(j => [j._id.toString(), j]));
-  const out = docs.map(a => ({
-    id: a._id.toString(),
-    status: a.status,
-    note: a.note ?? null,
-    applicant: (() => { const u = uMap.get(a.user.toString()); return u ? { email: u.email, birthdate: u.birthdate || null, address: u.address || null } : null; })(),
-    job: (() => { const j = jMap.get(a.job.toString()); return j ? { id: j._id.toString(), title: j.title } : null; })(),
-    createdAt: a.createdAt,
-  }));
-  res.json(out);
-});
-app.patch("/api/v2/applications/:id", authRequired, requireRole("hr"), async (req, res) => {
-  const { status, note } = req.body || {};
-  if (!status && note === undefined) return res.status(400).json({ error: "missing_fields" });
-  const patch = { updatedAt: new Date() };
-  if (status) patch.status = status;
-  if (note !== undefined) patch.note = note;
-  const r = await Applications.updateOne({ _id: new ObjectId(req.params.id) }, { $set: patch });
-  if (!r.matchedCount) return res.status(404).json({ error: "Not found" });
-  res.json({ ok: true, id: req.params.id, ...(patch.status ? { status: patch.status } : {}) });
-});
-app.delete("/api/v2/applications/:id", authRequired, requireRole("hr"), async (req, res) => {
-  await Applications.deleteOne({ _id: new ObjectId(req.params.id) });
-  res.json({ ok: true });
+
+    const token = jwt.sign(
+      { 
+        id: user._id.toString(),
+        email: user.email, 
+        role: user.role 
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    
+    res.json({ token });
+  } catch (err) {
+    console.error('[login] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
 });
 
-// Meetings
-app.post("/api/v2/meetings", authRequired, async (req, res) => {
+app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
-    const { jobId, startsAt, endsAt, mode, location, applicantEmail } = req.body || {};
-    if (!jobId || !startsAt || !endsAt) return res.status(400).json({ error: "missing_fields" });
-    const job = await Jobs.findOne({ _id: new ObjectId(jobId) });
-    if (!job) return res.status(404).json({ error: "job_not_found" });
+    const user = await db.collection('users').findOne(
+      { _id: new ObjectId(req.user.id) },
+      { projection: { passwordHash: 0 } }
+    );
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      birthdate: user.birthdate,
+      address: user.address
+    });
+  } catch (err) {
+    console.error('[me] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
 
-    let userDoc;
-    if (req.user.role === "hr") {
-      if (!applicantEmail) return res.status(400).json({ error: "missing_applicantEmail" });
-      userDoc = await ensureApplicant(applicantEmail);
-    } else if (req.user.role === "applicant") {
-      userDoc = await findUserByEmail(req.user.email);
-    } else return res.status(403).json({ error: "forbidden" });
-
-    const doc = { job: job._id, user: userDoc._id, status: "proposed", startsAt: new Date(startsAt), endsAt: new Date(endsAt), mode: mode || "online", location: location || "", createdAt: new Date(), updatedAt: new Date() };
-    const r = await Meetings.insertOne(doc);
-    return res.json({ ok: true, id: r.insertedId.toString(), status: doc.status });
-  } catch (e) { console.error("meetings:create", e); return res.status(500).json({ error: "server_error" }); }
-});
-app.get("/api/v2/meetings/me", authRequired, async (req, res) => {
-  if (req.user.role !== "applicant") return res.status(403).json({ error: "forbidden" });
-  const me = await findUserByEmail(req.user.email);
-  const docs = await Meetings.find({ user: me._id }).sort({ _id: -1 }).toArray();
-  const jobs = await Jobs.find({ _id: { $in: docs.map(d => d.job) } }).toArray();
-  const jMap = new Map(jobs.map(j => [j._id.toString(), j]));
-  const out = docs.map(m => ({
-    id: m._id.toString(), status: m.status, startsAt: m.startsAt, endsAt: m.endsAt, mode: m.mode, location: m.location,
-    job: (() => { const j = jMap.get(m.job.toString()); return j ? { id: j._id.toString(), title: j.title } : null; })(),
-  }));
-  res.json(out);
-});
-app.get("/api/v2/meetings", authRequired, requireRole("hr"), async (req, res) => {
-  const { jobId } = req.query;
-  const q = {};
-  if (jobId) q.job = new ObjectId(String(jobId));
-  const docs = await Meetings.find(q).sort({ _id: -1 }).toArray();
-  const users = await Users.find({ _id: { $in: docs.map(d => d.user) } }).toArray();
-  const uMap = new Map(users.map(u => [u._id.toString(), u]));
-  const out = docs.map(m => ({
-    id: m._id.toString(), status: m.status, startsAt: m.startsAt, endsAt: m.endsAt, mode: m.mode, location: m.location,
-    applicant: (() => { const u = uMap.get(m.user.toString()); return u ? { email: u.email } : null; })(),
-  }));
-  res.json(out);
-});
-app.patch("/api/v2/meetings/:id", authRequired, requireRole("hr"), async (req, res) => {
-  const patch = {};
-  ["status","startsAt","endsAt","mode","location"].forEach(k => { if (req.body?.[k] !== undefined) patch[k] = ["startsAt","endsAt"].includes(k) ? new Date(req.body[k]) : req.body[k]; });
-  patch.updatedAt = new Date();
-  const r = await Meetings.updateOne({ _id: new ObjectId(req.params.id) }, { $set: patch });
-  if (!r.matchedCount) return res.status(404).json({ error: "not_found" });
-  res.json({ ok: true, id: req.params.id, ...(patch.status ? { status: patch.status } : {}) });
-});
-app.delete("/api/v2/meetings/:id", authRequired, requireRole("hr"), async (req, res) => { await Meetings.deleteOne({ _id: new ObjectId(req.params.id) }); res.json({ ok: true }); });
-
-// LinkedIn Dummy (HR)
-app.post("/api/v2/linkedin/publish/:jobId", authRequired, requireRole("hr"), async (req, res) => {
-  const { jobId } = req.params;
-  const j = await Jobs.findOne({ _id: new ObjectId(jobId) });
-  if (!j) return res.status(404).json({ error: "job_not_found" });
-  const linkedinPostId = `li_${String(jobId).slice(-6)}`;
-  await Jobs.updateOne({ _id: j._id }, { $set: { linkedinPostId, updatedAt: new Date() } });
-  res.json({ ok: true, jobId, linkedinPostId, url: `https://www.linkedin.com/feed/update/${linkedinPostId}` });
-});
-app.delete("/api/v2/linkedin/publish/:jobId", authRequired, requireRole("hr"), async (req, res) => {
-  await Jobs.updateOne({ _id: new ObjectId(req.params.jobId) }, { $unset: { linkedinPostId: "" }, $set: { updatedAt: new Date() } });
-  res.json({ ok: true });
-});
-app.post("/api/v2/linkedin/import-applicant", authRequired, requireRole("hr"), async (req, res) => {
+// Public routes
+app.post('/api/public/register', async (req, res) => {
   try {
-    const { profileUrl, email, name, birthdate, address, jobId } = req.body || {};
-    if (!email) return res.status(400).json({ error: "missing_email" });
-    const user = await ensureApplicant(email, { name, birthdate, address });
-    let applicationId = null;
-    if (jobId) {
-      const job = await Jobs.findOne({ _id: new ObjectId(jobId) });
-      if (job) {
-        try {
-          const doc = { job: job._id, user: user._id, status: "submitted", note: null, createdAt: new Date(), updatedAt: new Date(), source: "linkedin", sourceProfile: profileUrl || null };
-          const r = await Applications.insertOne(doc); applicationId = r.insertedId.toString();
-        } catch (e) {
-          if (e?.code === 11000) { const existing = await Applications.findOne({ job: job._id, user: user._id }); applicationId = existing?._id?.toString() || null; }
-          else throw e;
+    const { email, password, name, birthdate, address } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    const existing = await db.collection('users').findOne({ email: email.toLowerCase() });
+    if (existing) {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const result = await db.collection('users').insertOne({
+      email: email.toLowerCase(),
+      passwordHash,
+      role: 'applicant',
+      name: name || '',
+      birthdate: birthdate ? new Date(birthdate) : null,
+      address: address || '',
+      createdAt: new Date()
+    });
+
+    res.status(201).json({ ok: true, id: result.insertedId });
+  } catch (err) {
+    console.error('[register] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.get('/api/public/jobs', async (req, res) => {
+  try {
+    const jobs = await db.collection('jobs').find({ open: true }).sort({ createdAt: -1 }).toArray();
+    res.json(jobs.map(job => ({
+      id: job._id.toString(),
+      title: job.title,
+      description: job.description,
+      createdAt: job.createdAt,
+      linkedinPostId: job.linkedinPostId
+    })));
+  } catch (err) {
+    console.error('[public-jobs] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// New enhanced routes
+app.use("/api/v2/meetings", meetingsRouter);
+app.use("/api/v2", applicationsRouter);
+
+// Jobs management (HR/Admin)
+app.get('/api/v2/jobs', requireAuth, requireRole('admin', 'hr'), async (req, res) => {
+  try {
+    const jobs = await db.collection('jobs').find({}).sort({ createdAt: -1 }).toArray();
+    res.json(jobs.map(job => ({
+      id: job._id.toString(),
+      title: job.title,
+      description: job.description,
+      open: job.open !== false,
+      createdAt: job.createdAt,
+      linkedinPostId: job.linkedinPostId
+    })));
+  } catch (err) {
+    console.error('[jobs] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.post('/api/v2/jobs', requireAuth, requireRole('admin', 'hr'), async (req, res) => {
+  try {
+    const { title, description = '', open = true } = req.body || {};
+    if (!title) {
+      return res.status(400).json({ error: 'Title required' });
+    }
+
+    const result = await db.collection('jobs').insertOne({
+      title,
+      description,
+      open,
+      createdAt: new Date()
+    });
+
+    res.status(201).json({
+      id: result.insertedId.toString(),
+      title,
+      description,
+      open
+    });
+  } catch (err) {
+    console.error('[create-job] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.patch('/api/v2/jobs/:id', requireAuth, requireRole('admin', 'hr'), async (req, res) => {
+  try {
+    const { title, description, open } = req.body || {};
+    const updateFields = {};
+    
+    if (title !== undefined) updateFields.title = title;
+    if (description !== undefined) updateFields.description = description;
+    if (open !== undefined) updateFields.open = open;
+
+    const result = await db.collection('jobs').findOneAndUpdate(
+      { _id: new ObjectId(req.params.id) },
+      { $set: updateFields },
+      { returnDocument: 'after' }
+    );
+
+    if (!result.value) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    res.json({
+      id: result.value._id.toString(),
+      title: result.value.title,
+      description: result.value.description,
+      open: result.value.open
+    });
+  } catch (err) {
+    console.error('[update-job] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.delete('/api/v2/jobs/:id', requireAuth, requireRole('admin', 'hr'), async (req, res) => {
+  try {
+    const result = await db.collection('jobs').deleteOne({ _id: new ObjectId(req.params.id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[delete-job] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// CV Management
+app.post('/api/v2/cv', requireAuth, requireRole('applicant'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const result = await db.collection('cvs').insertOne({
+      applicant: new ObjectId(req.user.id),
+      originalName: req.file.originalname,
+      filename: req.file.filename,
+      path: req.file.path,
+      size: req.file.size,
+      uploadedAt: new Date()
+    });
+
+    res.status(201).json({
+      id: result.insertedId.toString(),
+      originalName: req.file.originalname,
+      size: req.file.size
+    });
+  } catch (err) {
+    console.error('[upload-cv] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.get('/api/v2/cv/me', requireAuth, requireRole('applicant'), async (req, res) => {
+  try {
+    const cvs = await db.collection('cvs').find({ 
+      applicant: new ObjectId(req.user.id) 
+    }).sort({ uploadedAt: -1 }).toArray();
+
+    res.json(cvs.map(cv => ({
+      id: cv._id.toString(),
+      originalName: cv.originalName,
+      size: cv.size,
+      uploadedAt: cv.uploadedAt
+    })));
+  } catch (err) {
+    console.error('[my-cvs] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.get('/api/v2/cv/:id/download', requireAuth, async (req, res) => {
+  try {
+    const cv = await db.collection('cvs').findOne({ _id: new ObjectId(req.params.id) });
+    if (!cv) {
+      return res.status(404).json({ error: 'CV not found' });
+    }
+
+    // Check access rights
+    if (req.user.role === 'applicant' && cv.applicant.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    res.download(cv.path, cv.originalName);
+  } catch (err) {
+    console.error('[download-cv] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.delete('/api/v2/cv/:id', requireAuth, requireRole('applicant'), async (req, res) => {
+  try {
+    const result = await db.collection('cvs').deleteOne({
+      _id: new ObjectId(req.params.id),
+      applicant: new ObjectId(req.user.id)
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'CV not found' });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[delete-cv] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// User Management (Admin)
+app.get('/api/v2/admin/users', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const users = await db.collection('users').find(
+      {},
+      { projection: { passwordHash: 0 } }
+    ).sort({ createdAt: -1 }).toArray();
+
+    res.json(users.map(user => ({
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      createdAt: user.createdAt
+    })));
+  } catch (err) {
+    console.error('[admin-users] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.post('/api/v2/admin/users', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const { email, password = 'secret123', role = 'applicant' } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: 'Email required' });
+    }
+
+    const existing = await db.collection('users').findOne({ email: email.toLowerCase() });
+    if (existing) {
+      return res.status(409).json({ error: 'Email already exists' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const result = await db.collection('users').insertOne({
+      email: email.toLowerCase(),
+      passwordHash,
+      role,
+      createdAt: new Date()
+    });
+
+    res.status(201).json({
+      id: result.insertedId.toString(),
+      email: email.toLowerCase(),
+      role
+    });
+  } catch (err) {
+    console.error('[create-user] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.patch('/api/v2/admin/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const { email, password, role } = req.body || {};
+    const updateFields = {};
+    
+    if (email) updateFields.email = email.toLowerCase();
+    if (password) updateFields.passwordHash = await bcrypt.hash(password, 10);
+    if (role) updateFields.role = role;
+
+    const result = await db.collection('users').findOneAndUpdate(
+      { _id: new ObjectId(req.params.id) },
+      { $set: updateFields },
+      { returnDocument: 'after' }
+    );
+
+    if (!result.value) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      id: result.value._id.toString(),
+      email: result.value.email,
+      role: result.value.role
+    });
+  } catch (err) {
+    console.error('[update-user] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.delete('/api/v2/admin/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const result = await db.collection('users').deleteOne({ _id: new ObjectId(req.params.id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[delete-user] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// Profile management (Applicant)
+app.get('/api/applicant/profile', requireAuth, requireRole('applicant'), async (req, res) => {
+  try {
+    const user = await db.collection('users').findOne(
+      { _id: new ObjectId(req.user.id) },
+      { projection: { passwordHash: 0 } }
+    );
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      id: user._id.toString(),
+      email: user.email,
+      name: user.name || '',
+      birthdate: user.birthdate,
+      address: user.address || '',
+      deleteAt: user.deleteAt
+    });
+  } catch (err) {
+    console.error('[profile] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.put('/api/applicant/profile', requireAuth, requireRole('applicant'), async (req, res) => {
+  try {
+    const { name, birthdate, address } = req.body || {};
+    const updateFields = {};
+    
+    if (name !== undefined) updateFields.name = name;
+    if (birthdate !== undefined) updateFields.birthdate = birthdate ? new Date(birthdate) : null;
+    if (address !== undefined) updateFields.address = address;
+
+    const result = await db.collection('users').findOneAndUpdate(
+      { _id: new ObjectId(req.user.id) },
+      { $set: updateFields },
+      { returnDocument: 'after' }
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[update-profile] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.post('/api/applicant/delete-request', requireAuth, requireRole('applicant'), async (req, res) => {
+  try {
+    const deleteAt = new Date();
+    deleteAt.setDate(deleteAt.getDate() + 30); // 30 days from now
+
+    await db.collection('users').findOneAndUpdate(
+      { _id: new ObjectId(req.user.id) },
+      { $set: { deleteAt } }
+    );
+
+    res.json({ ok: true, deleteAt });
+  } catch (err) {
+    console.error('[delete-request] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.delete('/api/applicant/delete-request', requireAuth, requireRole('applicant'), async (req, res) => {
+  try {
+    await db.collection('users').findOneAndUpdate(
+      { _id: new ObjectId(req.user.id) },
+      { $unset: { deleteAt: 1 } }
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[cancel-delete-request] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// Agency Management (Partner API)
+app.get('/api/v2/agencies', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const agencies = await db.collection('agencies').find({}).sort({ createdAt: -1 }).toArray();
+    res.json(agencies.map(agency => ({
+      id: agency._id.toString(),
+      name: agency.name,
+      apiKey: agency.apiKey,
+      active: agency.active,
+      permissions: agency.permissions,
+      createdAt: agency.createdAt
+    })));
+  } catch (err) {
+    console.error('[agencies] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.post('/api/v2/agencies', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const { name, permissions = ['jobs:read', 'applications:read'] } = req.body || {};
+    if (!name) {
+      return res.status(400).json({ error: 'Name required' });
+    }
+
+    const apiKey = 'api_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+    
+    const result = await db.collection('agencies').insertOne({
+      name,
+      apiKey,
+      permissions,
+      active: true,
+      createdAt: new Date()
+    });
+
+    res.status(201).json({
+      id: result.insertedId.toString(),
+      apiKey
+    });
+  } catch (err) {
+    console.error('[create-agency] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.patch('/api/v2/agencies/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const { active, permissions, name } = req.body || {};
+    const updateFields = {};
+    
+    if (typeof active === 'boolean') updateFields.active = active;
+    if (Array.isArray(permissions)) updateFields.permissions = permissions;
+    if (name) updateFields.name = name;
+
+    const result = await db.collection('agencies').findOneAndUpdate(
+      { _id: new ObjectId(req.params.id) },
+      { $set: updateFields },
+      { returnDocument: 'after' }
+    );
+
+    if (!result.value) {
+      return res.status(404).json({ error: 'Agency not found' });
+    }
+
+    res.json({
+      id: result.value._id.toString(),
+      active: result.value.active,
+      permissions: result.value.permissions
+    });
+  } catch (err) {
+    console.error('[update-agency] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.post('/api/v2/agencies/:id/rotate-key', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const apiKey = 'api_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+    
+    const result = await db.collection('agencies').findOneAndUpdate(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { apiKey } },
+      { returnDocument: 'after' }
+    );
+
+    if (!result.value) {
+      return res.status(404).json({ error: 'Agency not found' });
+    }
+
+    res.json({ apiKey });
+  } catch (err) {
+    console.error('[rotate-key] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.delete('/api/v2/agencies/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const result = await db.collection('agencies').deleteOne({ _id: new ObjectId(req.params.id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Agency not found' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[delete-agency] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// LinkedIn Integration (Dummy)
+app.post('/api/v2/linkedin/publish/:jobId', requireAuth, requireRole('admin', 'hr'), async (req, res) => {
+  try {
+    const job = await db.collection('jobs').findOne({ _id: new ObjectId(req.params.jobId) });
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    const postId = 'li_' + req.params.jobId.slice(-6);
+    const url = `https://www.linkedin.com/feed/update/${postId}`;
+    
+    // Update job with LinkedIn post ID
+    await db.collection('jobs').findOneAndUpdate(
+      { _id: new ObjectId(req.params.jobId) },
+      { $set: { linkedinPostId: postId } }
+    );
+    
+    // Log the LinkedIn publish action
+    console.log(`[LinkedIn] Job "${job.title}" published to LinkedIn with post ID: ${postId}`);
+    console.log(`[LinkedIn] URL: ${url}`);
+    console.log(`[LinkedIn] Timestamp: ${new Date().toISOString()}`);
+
+    res.json({ 
+      ok: true, 
+      jobId: req.params.jobId, 
+      linkedinPostId: postId, 
+      url 
+    });
+  } catch (err) {
+    console.error('[linkedin-publish] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.delete('/api/v2/linkedin/publish/:jobId', requireAuth, requireRole('admin', 'hr'), async (req, res) => {
+  try {
+    const job = await db.collection('jobs').findOne({ _id: new ObjectId(req.params.jobId) });
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Remove LinkedIn post ID
+    await db.collection('jobs').findOneAndUpdate(
+      { _id: new ObjectId(req.params.jobId) },
+      { $unset: { linkedinPostId: 1 } }
+    );
+    
+    // Log the LinkedIn unpublish action
+    console.log(`[LinkedIn] Job "${job.title}" unpublished from LinkedIn`);
+    console.log(`[LinkedIn] Timestamp: ${new Date().toISOString()}`);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[linkedin-unpublish] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// Partner API (External access)
+async function agencyKeyAuth(req, res, next) {
+  try {
+    const key = req.headers['x-api-key'];
+    if (!key) {
+      return res.status(401).json({ error: 'Missing API key' });
+    }
+
+    const agency = await db.collection('agencies').findOne({ apiKey: key, active: true });
+    if (!agency) {
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+
+    req.agency = {
+      id: agency._id.toString(),
+      name: agency.name,
+      permissions: agency.permissions
+    };
+    next();
+  } catch (err) {
+    console.error('[agency-auth] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+}
+
+function requirePermission(permission) {
+  return (req, res, next) => {
+    if (!req.agency?.permissions?.includes(permission)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+}
+
+app.get('/api/agency/jobs', agencyKeyAuth, requirePermission('jobs:read'), async (req, res) => {
+  try {
+    const jobs = await db.collection('jobs').find({ open: true }).sort({ createdAt: -1 }).toArray();
+    res.json(jobs.map(job => ({
+      id: job._id.toString(),
+      title: job.title,
+      description: job.description,
+      linkedinPostId: job.linkedinPostId || null
+    })));
+  } catch (err) {
+    console.error('[agency-jobs] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.get('/api/agency/applications', agencyKeyAuth, requirePermission('applications:read'), async (req, res) => {
+  try {
+    const { jobId } = req.query;
+    const matchStage = jobId ? { job: new ObjectId(jobId) } : {};
+
+    const applications = await db.collection('applications').aggregate([
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'jobs',
+          localField: 'job',
+          foreignField: '_id',
+          as: 'job'
         }
-      }
-    }
-    res.json({ ok: true, userId: user._id.toString(), ...(applicationId ? { applicationId } : {}) });
-  } catch (e) { console.error("linkedin:import-applicant", e); res.status(500).json({ error: "server_error" }); }
+      },
+      { $unwind: '$job' },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'applicant',
+          foreignField: '_id',
+          as: 'applicant'
+        }
+      },
+      { $unwind: '$applicant' },
+      { $sort: { createdAt: -1 } }
+    ]).toArray();
+
+    res.json(applications.map(app => ({
+      id: app._id.toString(),
+      status: app.status,
+      job: {
+        id: app.job._id.toString(),
+        title: app.job.title
+      },
+      applicant: {
+        email: app.applicant.email
+      },
+      createdAt: app.createdAt
+    })));
+  } catch (err) {
+    console.error('[agency-applications] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
 });
 
-// Agencies – jetzt ADMIN
-async function agencyAuth(req, res, next) {
-  const key = req.headers["x-api-key"];
-  if (!key) return res.status(401).json({ error: "invalid_api_key" });
-  const ag = await Agencies.findOne({ apiKey: key, active: { $ne: false } });
-  if (!ag) return res.status(401).json({ error: "invalid_api_key" });
-  req.agency = ag; next();
-}
-app.post("/api/v2/agencies", authRequired, requireRole("admin"), async (req, res) => {
-  const { name } = req.body || {};
-  if (!name) return res.status(400).json({ error: "missing_name" });
-  const apiKey = randKey(24);
-  const doc = { name, apiKey, active: true, permissions: ["jobs:read", "applications:read"], createdAt: new Date(), updatedAt: new Date() };
-  const r = await Agencies.insertOne(doc);
-  res.json({ ok: true, id: r.insertedId.toString(), apiKey });
-});
-app.get("/api/v2/agencies", authRequired, requireRole("admin"), async (_req, res) => {
-  const list = await Agencies.find({}).sort({ _id: -1 }).toArray();
-  res.json(list);
-});
-app.post("/api/v2/agencies/:id/rotate-key", authRequired, requireRole("admin"), async (req, res) => {
-  const apiKey = randKey(24);
-  const r = await Agencies.updateOne({ _id: new ObjectId(req.params.id) }, { $set: { apiKey, updatedAt: new Date() } });
-  if (!r.matchedCount) return res.status(404).json({ error: "not_found" });
-  res.json({ ok: true, apiKey });
-});
-app.delete("/api/v2/agencies/:id", authRequired, requireRole("admin"), async (req, res) => {
-  await Agencies.deleteOne({ _id: new ObjectId(req.params.id) });
-  res.json({ ok: true });
-});
-app.get("/api/agency/jobs", agencyAuth, async (_req, res) => {
-  const docs = await Jobs.find({ open: { $ne: false } }).sort({ _id: -1 }).toArray();
-  res.json(docs.map(j => ({ id: j._id.toString(), title: j.title, description: j.description, linkedinPostId: j.linkedinPostId ?? null })));
-});
-app.get("/api/agency/applications", agencyAuth, async (req, res) => {
-  const { jobId } = req.query;
-  const q = {};
-  if (jobId) q.job = new ObjectId(String(jobId));
-  const docs = await Applications.find(q).sort({ _id: -1 }).toArray();
-  const users = await Users.find({ _id: { $in: docs.map(d => d.user) } }).toArray();
-  const uMap = new Map(users.map(u => [u._id.toString(), u]));
-  res.json(docs.map(a => ({ id: a._id.toString(), status: a.status, applicant: (() => { const u = uMap.get(a.user.toString()); return u ? { email: u.email } : null; })(), createdAt: a.createdAt })));
+// Mount API documentation
+mountApiDocs(app);
+
+// Error handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
 });
 
-try { mountApiDocs(app); } catch (e) { console.error("[docs] mount failed, continuing without UI", e); }
-
-function startGdprWorker() {
-  console.log("[gdpr] worker started, interval 1h");
-  setInterval(async () => { try { const now = new Date(); await Applications.deleteMany({ deleteAt: { $lte: now } }); } catch (e) { console.error("[gdpr] error", e); } }, 60*60*1000);
-}
-process.on("uncaughtException", (e) => console.error("uncaughtException", e));
-process.on("unhandledRejection", (e) => console.error("unhandledRejection", e));
-
-initDb().then(() => { startGdprWorker(); app.listen(PORT, () => console.log(`API listening on :${PORT}`)); }).catch(err => { console.error("DB init failed", err); process.exit(1); });
+// Start server
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🍫 Chocadies server running on port ${PORT}`);
+    console.log(`📚 API documentation: http://localhost:${PORT}/api/docs`);
+  });
+});

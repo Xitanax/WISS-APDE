@@ -13,20 +13,20 @@ services:
   backend:
     build: ./backend
     environment:
-      MONGO_URI: mongodb://mongo:27017/chocadies
+      MONGO_URL: mongodb://mongo:27017/chocadies
       JWT_SECRET: ${JWT_SECRET:-devsecret}
-      API_KEY: ${API_KEY:-partner-dev-key}
       BOOTSTRAP_SECRET: ${BOOTSTRAP_SECRET:-my-super-secret}
     depends_on:
       mongo:
         condition: service_healthy
     networks: [chocadies-net]
+    volumes:
+      - ./backend/uploads:/app/uploads
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 5s
     ports:
       - "3000:3000"
 
