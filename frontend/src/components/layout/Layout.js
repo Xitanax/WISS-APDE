@@ -4,9 +4,15 @@ import { useAuth } from '../../context/AuthContext';
 import { LogOut, Briefcase, Users, Settings, User } from 'lucide-react';
 
 const Layout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  console.log('🏗️ Layout render:', {
+    user: user ? { email: user.email, role: user.role } : null,
+    loading,
+    currentPath: location.pathname
+  });
 
   const handleLogout = () => {
     logout();
@@ -28,10 +34,23 @@ const Layout = () => {
       case 'applicant':
         items.push({ path: '/account', label: 'Mein Bereich', icon: User });
         break;
+      default:
+        console.warn('Unknown user role:', user.role);
     }
 
     return items;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">Laden...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900">

@@ -1,9 +1,17 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const ProtectedRoute = ({ children, roles = [] }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
+
+  console.log('🛡️ ProtectedRoute check:', {
+    loading,
+    user: user ? { email: user.email, role: user.role } : null,
+    requiredRoles: roles,
+    currentPath: location.pathname
+  });
 
   if (loading) {
     return (
@@ -17,13 +25,16 @@ const ProtectedRoute = ({ children, roles = [] }) => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    console.log('❌ No user found, redirecting to login');
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (roles.length > 0 && !roles.includes(user.role)) {
+    console.log(`❌ User role "${user.role}" not in required roles:`, roles);
     return <Navigate to="/jobs" replace />;
   }
 
+  console.log('✅ ProtectedRoute access granted');
   return children;
 };
 

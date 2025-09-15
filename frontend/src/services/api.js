@@ -13,18 +13,42 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    console.log(`📤 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+      headers: config.headers.Authorization ? '✅ With Auth' : '❌ No Auth'
+    });
+    
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('❌ Request interceptor error:', error);
+    return Promise.reject(error);
+  }
 );
 
 // Response interceptor
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
+    return response;
+  },
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const url = error.config?.url;
+    
+    console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${url} - ${status}`, {
+      data: error.response?.data,
+      message: error.message
+    });
+
+    if (status === 401) {
+      console.log('🚨 401 Unauthorized - Clearing auth data');
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      delete api.defaults.headers.common['Authorization'];
+      
+      // ENTFERNT: Automatische Umleitung hier
+      // Stattdessen wird das von AuthContext/ProtectedRoute gehandhabt
+      
     } else if (error.response?.data?.error) {
       toast.error(error.response.data.error);
     } else if (error.message === 'Network Error') {

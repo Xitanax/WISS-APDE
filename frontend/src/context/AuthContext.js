@@ -18,18 +18,49 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAuth();
-  }, []);
+    
+    // Setup API response interceptor to handle 401 errors
+    const responseInterceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401 && user) {
+          console.log('🚨 401 Error detected, logging out user');
+          logout();
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptor on unmount
+    return () => {
+      api.interceptors.response.eject(responseInterceptor);
+    };
+  }, [user]);
 
   const checkAuth = async () => {
     try {
       const token = localStorage.getItem('token');
       if (token) {
+        // Set the authorization header for all requests
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        const response = await api.get('/auth/me');
-        setUser(response.data);
+        
+        try {
+          const response = await api.get('/auth/me');
+          setUser(response.data);
+          console.log('✅ Auth check successful:', response.data);
+        } catch (error) {
+          console.error('❌ Auth check failed:', error.response?.status, error.response?.data);
+          // If token is invalid, clear it
+          localStorage.removeItem('token');
+          delete api.defaults.headers.common['Authorization'];
+          setUser(null);
+        }
+      } else {
+        console.log('ℹ️ No token found in localStorage');
+        setUser(null);
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
+      console.error('Auth check error:', error);
       localStorage.removeItem('token');
       delete api.defaults.headers.common['Authorization'];
       setUser(null);
@@ -40,9 +71,17 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
+      console.log('🔐 Attempting login for:', email);
       const response = await api.post('/auth/login', { email, password });
       const { token } = response.data;
       
+      if (!token) {
+        throw new Error('No token received from server');
+      }
+
+      console.log('✅ Login successful, token received');
+      
+      // Store token and set header
       localStorage.setItem('token', token);
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
@@ -50,9 +89,17 @@ export const AuthProvider = ({ children }) => {
       const userResponse = await api.get('/auth/me');
       setUser(userResponse.data);
       
+      console.log('✅ User data loaded:', userResponse.data);
+      
       return response.data;
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('❌ Login failed:', error.response?.status, error.response?.data);
+      
+      // Clean up on failed login
+      localStorage.removeItem('token');
+      delete api.defaults.headers.common['Authorization'];
+      setUser(null);
+      
       throw error;
     }
   };
@@ -68,6 +115,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    console.log('🚪 Logging out user');
     localStorage.removeItem('token');
     delete api.defaults.headers.common['Authorization'];
     setUser(null);
@@ -75,7 +123,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading, checkAuth }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      register, 
+      logout, 
+      loading, 
+      checkAuth 
+    }}>
       {children}
     </AuthContext.Provider>
   );

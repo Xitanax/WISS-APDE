@@ -12,18 +12,25 @@ const loginSchema = yup.object({
 });
 
 const LoginPage = () => {
-  const { login, user } = useAuth();
+  const { login, user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isLoading, setIsLoading] = useState(false);
 
   const from = location.state?.from?.pathname || '/jobs';
 
+  console.log('🔐 LoginPage render:', {
+    user: user ? { email: user.email, role: user.role } : null,
+    loading,
+    from
+  });
+
   useEffect(() => {
-    if (user) {
+    if (user && !loading) {
+      console.log('✅ User already logged in, redirecting to:', from);
       navigate(from, { replace: true });
     }
-  }, [user, navigate, from]);
+  }, [user, loading, navigate, from]);
 
   const {
     register,
@@ -37,14 +44,29 @@ const LoginPage = () => {
     setIsLoading(true);
     try {
       await login(data.email, data.password);
-      toast.success('Erfolgreich angemeldet!');
-      navigate(from, { replace: true });
+      
+      // Navigation will be handled by useEffect when user state updates
+      console.log('✅ Login successful, user state will update...');
+      
     } catch (error) {
-      // Error is handled by API interceptor
+      console.error('❌ Login error:', error);
+      // Error toast will be shown by API interceptor
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Show loading spinner if auth is still checking
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">Überprüfe Anmeldestatus...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
