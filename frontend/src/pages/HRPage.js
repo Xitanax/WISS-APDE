@@ -1,7 +1,55 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Download, Calendar, Users, MapPin, Clock, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Calendar, Users, MapPin, Clock, ChevronDown, ChevronUp, AlertCircle, LayoutDashboard } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+
+const meetingStatusMeta = {
+  proposed: { color: 'bg-blue-600', label: 'Termine vorgeschlagen' },
+  confirmed: { color: 'bg-green-600', label: 'Bestätigt' },
+  reschedule_requested: { color: 'bg-yellow-600', label: 'Verschiebung beantragt' },
+  rescheduled: { color: 'bg-purple-600', label: 'Neue Termine vorgeschlagen' },
+  cancelled: { color: 'bg-red-600', label: 'Abgesagt' },
+  completed: { color: 'bg-gray-600', label: 'Abgeschlossen' }
+};
+
+const getMeetingStatusColor = (status) => meetingStatusMeta[status]?.color || 'bg-gray-600';
+
+const getMeetingStatusText = (status) => meetingStatusMeta[status]?.label || status;
+
+function getMeetingSchedule(meeting) {
+  if (!meeting) {
+    return null;
+  }
+
+  if (meeting.finalStartsAt) {
+    return {
+      start: new Date(meeting.finalStartsAt),
+      end: meeting.finalEndsAt ? new Date(meeting.finalEndsAt) : null,
+      tentative: false
+    };
+  }
+
+  const slots = (meeting.timeSlots || [])
+    .map((slot) => ({
+      start: new Date(slot.startsAt),
+      end: slot.endsAt ? new Date(slot.endsAt) : null,
+      selected: slot.selected
+    }))
+    .filter((slot) => slot.start instanceof Date && !Number.isNaN(slot.start.getTime()));
+
+  if (!slots.length) {
+    return null;
+  }
+
+  const preferredSlot = slots.find((slot) => slot.selected);
+  const slotToUse = preferredSlot || slots.sort((a, b) => a.start - b.start)[0];
+
+  return {
+    start: slotToUse.start,
+    end: slotToUse.end,
+    tentative: true
+  };
+}
 
 const HRPage = () => {
   const [activeTab, setActiveTab] = useState('applications');
@@ -10,6 +58,9 @@ const HRPage = () => {
   const [unprocessedApplications, setUnprocessedApplications] = useState([]);
   const [archivedApplications, setArchivedApplications] = useState([]);
   const [meetings, setMeetings] = useState([]);
+  const [overviewApplications, setOverviewApplications] = useState([]);
+  const [overviewMeetings, setOverviewMeetings] = useState([]);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showJobModal, setShowJobModal] = useState(false);
@@ -27,6 +78,12 @@ const HRPage = () => {
       fetchMeetings();
     }
   }, [selectedJob]);
+
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      fetchOverviewData();
+    }
+  }, [activeTab]);
 
   const fetchJobs = async () => {
     try {
@@ -71,6 +128,22 @@ const HRPage = () => {
     }
   };
 
+  const fetchOverviewData = async () => {
+    try {
+      setOverviewLoading(true);
+      const [applicationsRes, meetingsRes] = await Promise.all([
+        api.get('/v2/applications?status=active'),
+        api.get('/v2/meetings/me')
+      ]);
+      setOverviewApplications(applicationsRes.data);
+      setOverviewMeetings(meetingsRes.data);
+    } catch (error) {
+      console.error('Error fetching overview data:', error);
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
   const handleCreateJob = async (jobData) => {
     try {
       await api.post('/v2/jobs', jobData);
@@ -104,6 +177,9 @@ const HRPage = () => {
       if (selectedJob?.id === jobId) {
         setSelectedJob(null);
       }
+      if (activeTab === 'overview') {
+        fetchOverviewData();
+      }
     } catch (error) {
       console.error('Error deleting job:', error);
     }
@@ -114,6 +190,9 @@ const HRPage = () => {
       await api.patch(`/v2/applications/${applicationId}`, { status });
       toast.success('Status aktualisiert');
       fetchApplications();
+      if (activeTab === 'overview') {
+        fetchOverviewData();
+      }
     } catch (error) {
       console.error('Error updating application status:', error);
     }
@@ -128,6 +207,9 @@ const HRPage = () => {
       toast.success('Meeting-Terminvorschläge gesendet');
       fetchMeetings();
       setShowMeetingModal(false);
+      if (activeTab === 'overview') {
+        fetchOverviewData();
+      }
     } catch (error) {
       if (error.response?.data?.error === 'applicant_must_be_in_review_status') {
         toast.error('Applicant muss sich im Status "In Prüfung" befinden');
@@ -169,6 +251,24 @@ const HRPage = () => {
     return <span className={`${color} text-white text-xs px-2 py-1 rounded`}>{text}</span>;
   };
 
+  const submittedOverviewCount = overviewApplications.filter((application) => application.status === 'submitted').length;
+  const inReviewOverviewCount = overviewApplications.filter((application) => application.status === 'in_review').length;
+
+  const sortedOverviewMeetings = [...overviewMeetings].sort((a, b) => {
+    const scheduleA = getMeetingSchedule(a);
+    const scheduleB = getMeetingSchedule(b);
+
+    if (!scheduleA?.start && !scheduleB?.start) return 0;
+    if (!scheduleA?.start) return 1;
+    if (!scheduleB?.start) return -1;
+
+    return scheduleA.start - scheduleB.start;
+  });
+
+  const confirmedMeetings = sortedOverviewMeetings.filter((meeting) => meeting.status === 'confirmed');
+  const rescheduleMeetings = sortedOverviewMeetings.filter((meeting) => meeting.status === 'reschedule_requested');
+  const pendingMeetings = sortedOverviewMeetings.filter((meeting) => ['proposed', 'rescheduled'].includes(meeting.status));
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -187,7 +287,8 @@ const HRPage = () => {
       <div className="mb-6">
         <div className="border-b border-gray-700">
           <nav className="-mb-px flex space-x-8">
-            {[
+            {[ 
+              { id: 'overview', label: 'Aktuelles', icon: LayoutDashboard },
               { id: 'applications', label: 'Bewerbungen', icon: Users },
               { id: 'jobs', label: 'Jobs verwalten', icon: Users },
               { id: 'meetings', label: 'Meetings', icon: Calendar },
@@ -213,35 +314,127 @@ const HRPage = () => {
       </div>
 
       {/* Job Selection */}
-      <div className="mb-6 flex gap-4 items-center">
-        <div className="flex-1">
-          <select
-            value={selectedJob?.id || ''}
-            onChange={(e) => {
-              const job = jobs.find(j => j.id === e.target.value);
-              setSelectedJob(job);
+      {activeTab !== 'overview' && (
+        <div className="mb-6 flex gap-4 items-center">
+          <div className="flex-1">
+            <select
+              value={selectedJob?.id || ''}
+              onChange={(e) => {
+                const job = jobs.find(j => j.id === e.target.value);
+                setSelectedJob(job || null);
+              }}
+              className="form-input"
+            >
+              <option value="">Job auswählen</option>
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.title} {!job.open && '(Geschlossen)'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => {
+              setEditingJob(null);
+              setShowJobModal(true);
             }}
-            className="form-input"
+            className="btn-primary flex items-center gap-2"
           >
-            <option value="">Job auswählen</option>
-            {jobs.map((job) => (
-              <option key={job.id} value={job.id}>
-                {job.title} {!job.open && '(Geschlossen)'}
-              </option>
-            ))}
-          </select>
+            <Plus size={16} />
+            Neuer Job
+          </button>
         </div>
-        <button
-          onClick={() => {
-            setEditingJob(null);
-            setShowJobModal(true);
-          }}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus size={16} />
-          Neuer Job
-        </button>
-      </div>
+      )}
+
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="card">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Aktive Bewerbungen</h2>
+                  <p className="text-sm text-gray-400">Alle eingegangenen und in Prüfung befindlichen Bewerbungen.</p>
+                </div>
+                <div className="text-right text-sm text-gray-400">
+                  <div>Eingereicht: {submittedOverviewCount}</div>
+                  <div>In Prüfung: {inReviewOverviewCount}</div>
+                </div>
+              </div>
+              {overviewLoading ? (
+                <p className="text-gray-400">Daten werden geladen...</p>
+              ) : overviewApplications.length === 0 ? (
+                <p className="text-gray-400">Keine aktiven Bewerbungen vorhanden.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Bewerber</th>
+                        <th>Name</th>
+                        <th>Job</th>
+                        <th>Eingereicht am</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {overviewApplications.map((application) => (
+                        <tr key={application.id}>
+                          <td>{application.applicant?.email || 'Unbekannt'}</td>
+                          <td>{application.applicant?.name || '-'}</td>
+                          <td>{application.job?.title || 'Job unbekannt'}</td>
+                          <td>{application.createdAt ? new Date(application.createdAt).toLocaleDateString('de-DE') : '-'}</td>
+                          <td>{getStatusBadge(application.status)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="card">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Meetings Übersicht</h2>
+                  <p className="text-sm text-gray-400">Verfolgen Sie bestätigte Termine, offene Vorschläge und Verschiebungen.</p>
+                </div>
+                <div className="text-sm text-gray-400">{overviewMeetings.length} Meetings</div>
+              </div>
+              {overviewLoading ? (
+                <p className="text-gray-400">Daten werden geladen...</p>
+              ) : (
+                <div className="space-y-6">
+                  <MeetingStatusList
+                    title="Bestätigte Meetings"
+                    emptyText="Keine bestätigten Meetings."
+                    meetings={confirmedMeetings}
+                  />
+                  <MeetingStatusList
+                    title="Verschiebung beantragt"
+                    emptyText="Keine offenen Verschiebungsanfragen."
+                    meetings={rescheduleMeetings}
+                  />
+                  <MeetingStatusList
+                    title="Offene Terminvorschläge"
+                    emptyText="Keine offenen Vorschläge."
+                    meetings={pendingMeetings}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="card">
+            <h2 className="text-xl font-semibold text-white mb-4">Kalender (nächste 7 Tage)</h2>
+            {overviewLoading ? (
+              <p className="text-gray-400">Daten werden geladen...</p>
+            ) : (
+              <MeetingCalendar meetings={overviewMeetings} />
+            )}
+            <p className="text-xs text-gray-500 mt-4">
+              Geplante und vorgeschlagene Meetings werden chronologisch dargestellt. Verschiebungen und offene Vorschläge bleiben sichtbar.
+            </p>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'applications' && selectedJob && (
         <div className="space-y-6">
@@ -504,32 +697,153 @@ const HRPage = () => {
   );
 };
 
+const MeetingStatusList = ({ title, meetings = [], emptyText }) => (
+  <div>
+    <h3 className="text-sm font-semibold text-white mb-3">{title}</h3>
+    {meetings.length === 0 ? (
+      <p className="text-sm text-gray-400">{emptyText}</p>
+    ) : (
+      <div className="space-y-3">
+        {meetings.map((meeting) => {
+          const schedule = getMeetingSchedule(meeting);
+          const applicantName = meeting.applicant?.name || meeting.applicant?.email || 'Unbekannt';
+          const jobTitle = meeting.job?.title || 'Job unbekannt';
+
+          return (
+            <div key={meeting.id} className="bg-gray-700/60 border border-gray-600/60 rounded-lg p-3">
+              <div className="flex justify-between items-start gap-3">
+                <div>
+                  <p className="text-sm font-medium text-white">{applicantName}</p>
+                  <p className="text-xs text-gray-400">{jobTitle}</p>
+                </div>
+                <span className={`${getMeetingStatusColor(meeting.status)} text-white text-[10px] px-2 py-0.5 rounded whitespace-nowrap`}>
+                  {getMeetingStatusText(meeting.status)}
+                </span>
+              </div>
+
+              {schedule?.start ? (
+                <div className="mt-2 text-xs text-gray-300 space-y-1">
+                  <div>{schedule.start.toLocaleDateString('de-DE')}</div>
+                  <div className="flex items-center gap-1 text-gray-400">
+                    <Clock size={12} />
+                    <span>
+                      {schedule.start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                      {schedule.end ? ` - ${schedule.end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                      {schedule.tentative ? ' · Vorschlag' : ''}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-gray-400">Keine Terminzeiten hinterlegt.</p>
+              )}
+
+              {meeting.rescheduleReason && (
+                <p className="mt-2 text-xs text-yellow-400">Grund: {meeting.rescheduleReason}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+);
+
+const MeetingCalendar = ({ meetings = [] }) => {
+  const days = React.useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(start);
+      day.setDate(start.getDate() + index);
+      return day;
+    });
+  }, []);
+
+  const eventsByDay = React.useMemo(() => {
+    const map = {};
+
+    meetings.forEach((meeting) => {
+      const schedule = getMeetingSchedule(meeting);
+      if (!schedule?.start) {
+        return;
+      }
+
+      const day = new Date(schedule.start);
+      day.setHours(0, 0, 0, 0);
+      const key = day.toISOString().split('T')[0];
+
+      if (!map[key]) {
+        map[key] = [];
+      }
+
+      map[key].push({ ...meeting, schedule });
+    });
+
+    Object.keys(map).forEach((key) => {
+      map[key].sort((a, b) => {
+        if (!a.schedule?.start || !b.schedule?.start) return 0;
+        return a.schedule.start - b.schedule.start;
+      });
+    });
+
+    return map;
+  }, [meetings]);
+
+  return (
+    <div className="bg-gray-900/40 border border-gray-700 rounded-lg p-4">
+      <div className="grid grid-cols-1 md:grid-cols-7 gap-4 md:gap-2">
+        {days.map((day) => {
+          const key = day.toISOString().split('T')[0];
+          const dayMeetings = eventsByDay[key] || [];
+
+          return (
+            <div key={key} className="bg-gray-800/70 border border-gray-700 rounded-lg p-3 flex flex-col gap-2 min-h-[150px]">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {day.toLocaleDateString('de-DE', { weekday: 'short' })}
+                </p>
+                <p className="text-xs text-gray-400">{day.toLocaleDateString('de-DE')}</p>
+              </div>
+              <div className="space-y-2 flex-1">
+                {dayMeetings.length === 0 ? (
+                  <p className="text-xs text-gray-500">Keine Termine</p>
+                ) : (
+                  dayMeetings.map((meeting) => {
+                    const applicantName = meeting.applicant?.name || meeting.applicant?.email || 'Unbekannt';
+                    const jobTitle = meeting.job?.title || 'Job unbekannt';
+                    const schedule = meeting.schedule;
+
+                    const timeLabel = schedule?.start
+                      ? `${schedule.start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}${schedule.end ? ` - ${schedule.end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}` : ''}`
+                      : 'Zeit offen';
+
+                    return (
+                      <div key={meeting.id} className="bg-gray-900/70 border border-gray-700 rounded p-2">
+                        <p className="text-xs font-medium text-white truncate">{applicantName}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{jobTitle}</p>
+                        <p className="text-[11px] text-gray-300 mt-1">
+                          {timeLabel}
+                          {schedule?.tentative ? ' · Vorschlag' : ''}
+                        </p>
+                        <span className={`${getMeetingStatusColor(meeting.status)} text-white text-[10px] px-2 py-0.5 rounded inline-block mt-2`}>
+                          {getMeetingStatusText(meeting.status)}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // Meeting Card Component
 const MeetingCard = ({ meeting }) => {
-  const getStatusColor = (status) => {
-    const colors = {
-      proposed: 'bg-blue-600',
-      confirmed: 'bg-green-600',
-      reschedule_requested: 'bg-yellow-600',
-      rescheduled: 'bg-purple-600',
-      cancelled: 'bg-red-600',
-      completed: 'bg-gray-600'
-    };
-    return colors[status] || 'bg-gray-600';
-  };
-
-  const getStatusText = (status) => {
-    const texts = {
-      proposed: 'Termine vorgeschlagen',
-      confirmed: 'Bestätigt',
-      reschedule_requested: 'Verschiebung beantragt',
-      rescheduled: 'Neue Termine vorgeschlagen',
-      cancelled: 'Abgesagt',
-      completed: 'Abgeschlossen'
-    };
-    return texts[status] || status;
-  };
-
   return (
     <div className="bg-gray-700 rounded-lg p-4">
       <div className="flex justify-between items-start mb-3">
@@ -538,11 +852,11 @@ const MeetingCard = ({ meeting }) => {
             <span className="text-white font-medium">
               {meeting.applicant?.email || 'Unbekannt'}
             </span>
-            <span className={`${getStatusColor(meeting.status)} text-white text-xs px-2 py-1 rounded`}>
-              {getStatusText(meeting.status)}
+            <span className={`${getMeetingStatusColor(meeting.status)} text-white text-xs px-2 py-1 rounded`}>
+              {getMeetingStatusText(meeting.status)}
             </span>
           </div>
-          
+
           {meeting.finalStartsAt ? (
             <div className="text-sm text-gray-300 space-y-1">
               <div className="flex items-center gap-2">
