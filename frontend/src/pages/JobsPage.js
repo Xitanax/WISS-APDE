@@ -1,18 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import toast from 'react-hot-toast'; // <- DIESER IMPORT FEHLTE
 import JobCard from '../components/jobs/JobCard';
-import ApplyModal from '../components/jobs/ApplyModal';
-import LoginModal from '../components/auth/LoginModal';
 
 const JobsPage = () => {
-  const { user } = useAuth();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [showApplyModal, setShowApplyModal] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
     fetchJobs();
@@ -26,29 +20,6 @@ const JobsPage = () => {
       console.error('Error fetching jobs:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleApply = (job) => {
-    if (!user) {
-      setSelectedJob(job);
-      setShowLoginModal(true);
-      return;
-    }
-    
-    if (user.role !== 'applicant') {
-      toast.error('Nur Bewerber können sich bewerben');
-      return;
-    }
-    
-    setSelectedJob(job);
-    setShowApplyModal(true);
-  };
-
-  const handleLoginSuccess = () => {
-    setShowLoginModal(false);
-    if (selectedJob) {
-      setShowApplyModal(true);
     }
   };
 
@@ -79,37 +50,13 @@ const JobsPage = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {jobs.map((job) => (
-            <JobCard 
-              key={job.id} 
-              job={job} 
-              onApply={() => handleApply(job)}
-              user={user}
+            <JobCard
+              key={job.id}
+              job={job}
+              onViewDetails={() => navigate(`/jobs/${job.id}`)}
             />
           ))}
         </div>
-      )}
-
-      <LoginModal
-        isOpen={showLoginModal}
-        onClose={() => {
-          setShowLoginModal(false);
-          setSelectedJob(null);
-        }}
-        onSuccess={handleLoginSuccess}
-      />
-
-      {showApplyModal && selectedJob && (
-        <ApplyModal
-          job={selectedJob}
-          onClose={() => {
-            setShowApplyModal(false);
-            setSelectedJob(null);
-          }}
-          onSuccess={() => {
-            setShowApplyModal(false);
-            setSelectedJob(null);
-          }}
-        />
       )}
     </div>
   );

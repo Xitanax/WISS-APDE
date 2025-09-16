@@ -16,7 +16,7 @@ export async function publishJob(job) {
     action: 'PUBLISH_JOB',
     timestamp: new Date().toISOString(),
     details: {
-      description: job.description,
+      description: job.shortDescription || job.description,
       status: job.open ? 'open' : 'closed'
     }
   });

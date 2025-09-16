@@ -34,7 +34,18 @@ router.get('/', requireAuth, requireAdminOrHr, async (req, res) => {
   const Job = getJobModel();
   if (!Job) return res.status(500).json({ error: 'Job model not registered' });
   const docs = await Job.find({}).sort({ createdAt: -1 }).lean();
-  res.json(docs);
+  res.json(
+    docs.map(doc => ({
+      id: doc._id.toString(),
+      title: doc.title,
+      shortDescription: doc.shortDescription || doc.description || '',
+      description: doc.description,
+      open: doc.open,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+      linkedinPostId: doc.linkedinPostId || null
+    }))
+  );
 });
 
 // POST /api/v2/jobs (admin/hr)
@@ -42,11 +53,17 @@ router.post('/', requireAuth, requireAdminOrHr, async (req, res) => {
   const Job = getJobModel();
   if (!Job) return res.status(500).json({ error: 'Job model not registered' });
 
-  const { title, description = '', open = true } = req.body || {};
+  const { title, shortDescription = '', description = '', open = true } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title required' });
 
-  const doc = await Job.create({ title, description, open });
-  res.status(201).json({ id: doc._id.toString(), title: doc.title, description: doc.description, open: doc.open });
+  const doc = await Job.create({ title, shortDescription, description, open });
+  res.status(201).json({
+    id: doc._id.toString(),
+    title: doc.title,
+    shortDescription: doc.shortDescription,
+    description: doc.description,
+    open: doc.open
+  });
 });
 
 // PATCH /api/v2/jobs/:id (admin/hr)
@@ -55,11 +72,17 @@ router.patch('/:id', requireAuth, requireAdminOrHr, async (req, res) => {
   if (!Job) return res.status(500).json({ error: 'Job model not registered' });
 
   const update = {};
-  ['title', 'description', 'open'].forEach(k => { if (k in req.body) update[k] = req.body[k]; });
+  ['title', 'shortDescription', 'description', 'open'].forEach(k => { if (k in req.body) update[k] = req.body[k]; });
 
   const doc = await Job.findByIdAndUpdate(req.params.id, update, { new: true, lean: true });
   if (!doc) return res.status(404).json({ error: 'not found' });
-  res.json(doc);
+  res.json({
+    id: doc._id,
+    title: doc.title,
+    shortDescription: doc.shortDescription || doc.description || '',
+    description: doc.description,
+    open: doc.open
+  });
 });
 
 // DELETE /api/v2/jobs/:id (admin/hr)

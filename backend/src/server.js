@@ -235,12 +235,40 @@ app.get('/api/public/jobs', async (req, res) => {
     res.json(jobs.map(job => ({
       id: job._id.toString(),
       title: job.title,
-      description: job.description,
+      shortDescription: job.shortDescription || job.description || '',
+      description: job.description || '',
       createdAt: job.createdAt,
       linkedinPostId: job.linkedinPostId
     })));
   } catch (err) {
     console.error('[public-jobs] error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.get('/api/public/jobs/:id', async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid job id' });
+    }
+
+    const job = await db.collection('jobs').findOne({ _id: new ObjectId(req.params.id) });
+    if (!job || job.open === false) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    res.json({
+      id: job._id.toString(),
+      title: job.title,
+      shortDescription: job.shortDescription || job.description || '',
+      description: job.description || '',
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      open: job.open !== false,
+      linkedinPostId: job.linkedinPostId || null
+    });
+  } catch (err) {
+    console.error('[public-job-detail] error:', err);
     res.status(500).json({ error: 'Internal error' });
   }
 });
@@ -256,9 +284,11 @@ app.get('/api/v2/jobs', requireAuth, requireRole('admin', 'hr'), async (req, res
     res.json(jobs.map(job => ({
       id: job._id.toString(),
       title: job.title,
-      description: job.description,
+      shortDescription: job.shortDescription || job.description || '',
+      description: job.description || '',
       open: job.open !== false,
       createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
       linkedinPostId: job.linkedinPostId
     })));
   } catch (err) {
@@ -269,21 +299,24 @@ app.get('/api/v2/jobs', requireAuth, requireRole('admin', 'hr'), async (req, res
 
 app.post('/api/v2/jobs', requireAuth, requireRole('admin', 'hr'), async (req, res) => {
   try {
-    const { title, description = '', open = true } = req.body || {};
+    const { title, shortDescription = '', description = '', open = true } = req.body || {};
     if (!title) {
       return res.status(400).json({ error: 'Title required' });
     }
 
     const result = await db.collection('jobs').insertOne({
       title,
+      shortDescription,
       description,
       open,
-      createdAt: new Date()
+      createdAt: new Date(),
+      updatedAt: new Date()
     });
 
     res.status(201).json({
       id: result.insertedId.toString(),
       title,
+      shortDescription,
       description,
       open
     });
@@ -295,12 +328,14 @@ app.post('/api/v2/jobs', requireAuth, requireRole('admin', 'hr'), async (req, re
 
 app.patch('/api/v2/jobs/:id', requireAuth, requireRole('admin', 'hr'), async (req, res) => {
   try {
-    const { title, description, open } = req.body || {};
+    const { title, shortDescription, description, open } = req.body || {};
     const updateFields = {};
-    
+
     if (title !== undefined) updateFields.title = title;
+    if (shortDescription !== undefined) updateFields.shortDescription = shortDescription;
     if (description !== undefined) updateFields.description = description;
     if (open !== undefined) updateFields.open = open;
+    updateFields.updatedAt = new Date();
 
     const result = await db.collection('jobs').findOneAndUpdate(
       { _id: new ObjectId(req.params.id) },
@@ -315,6 +350,7 @@ app.patch('/api/v2/jobs/:id', requireAuth, requireRole('admin', 'hr'), async (re
     res.json({
       id: result.value._id.toString(),
       title: result.value.title,
+      shortDescription: result.value.shortDescription || result.value.description || '',
       description: result.value.description,
       open: result.value.open
     });
