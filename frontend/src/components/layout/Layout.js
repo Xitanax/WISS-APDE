@@ -64,12 +64,14 @@ const Layout = () => {
               <div className="ml-10 flex items-baseline space-x-4">
                 {getNavItems().map((item) => {
                   const Icon = item.icon;
+                  const isActive =
+                    location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
                   return (
                     <Link
                       key={item.path}
                       to={item.path}
                       className={`px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                        location.pathname === item.path
+                        isActive
                           ? 'bg-gray-900 text-white'
                           : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                       }`}

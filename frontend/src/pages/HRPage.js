@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Calendar, Users, MapPin, Clock, ChevronDown, ChevronUp, AlertCircle, LayoutDashboard } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import RichTextEditor from '../components/common/RichTextEditor';
+import formatRichText from '../utils/richText';
 
 const meetingStatusMeta = {
   proposed: { color: 'bg-blue-600', label: 'Termine vorgeschlagen' },
@@ -594,7 +596,17 @@ const HRPage = () => {
           <div className="flex justify-between items-start mb-4">
             <div>
               <h2 className="text-xl font-semibold text-white mb-2">{selectedJob.title}</h2>
-              <p className="text-gray-400 mb-2">{selectedJob.description}</p>
+              <p className="text-gray-400 mb-2">
+                {selectedJob.shortDescription || 'Keine Kurzbeschreibung hinterlegt'}
+              </p>
+              {selectedJob.description ? (
+                <div
+                  className="rich-text-content mb-3"
+                  dangerouslySetInnerHTML={{ __html: formatRichText(selectedJob.description || '') }}
+                />
+              ) : (
+                <p className="text-gray-500 italic mb-3">Noch keine ausführliche Beschreibung hinterlegt.</p>
+              )}
               <div className="flex gap-2 items-center">
                 <span className={`text-xs px-2 py-1 rounded ${selectedJob.open ? 'bg-green-600' : 'bg-red-600'} text-white`}>
                   {selectedJob.open ? 'Offen' : 'Geschlossen'}
@@ -897,6 +909,7 @@ const MeetingCard = ({ meeting }) => {
 const JobModal = ({ job, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     title: job?.title || '',
+    shortDescription: job?.shortDescription || '',
     description: job?.description || '',
     open: job?.open ?? true,
   });
@@ -925,13 +938,29 @@ const JobModal = ({ job, onClose, onSave }) => {
           </div>
 
           <div>
-            <label className="form-label">Beschreibung</label>
+            <label className="form-label">Kurze Beschreibung *</label>
             <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              value={formData.shortDescription}
+              onChange={(e) => setFormData({ ...formData, shortDescription: e.target.value })}
               className="form-input"
-              rows={4}
+              rows={3}
+              required
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Diese Version wird auf der öffentlichen Übersicht angezeigt.
+            </p>
+          </div>
+
+          <div>
+            <label className="form-label">Ausführliche Beschreibung</label>
+            <RichTextEditor
+              value={formData.description}
+              onChange={(value) => setFormData({ ...formData, description: value })}
+              placeholder="Beschreibe die Stelle mit allen Details"
+            />
+            <p className="text-xs text-gray-400 mt-2">
+              Formatierungen und Absätze werden in den Jobdetails angezeigt.
+            </p>
           </div>
 
           <div>

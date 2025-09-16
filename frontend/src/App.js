@@ -8,6 +8,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 // Pages
 import LoginPage from './pages/LoginPage';
 import JobsPage from './pages/JobsPage';
+import JobDetailsPage from './pages/JobDetailsPage';
 import AdminPage from './pages/AdminPage';
 import HRPage from './pages/HRPage';
 import ApplicantPage from './pages/ApplicantPage';
@@ -22,6 +23,7 @@ function App() {
             <Route path="/" element={<Layout />}>
               <Route index element={<Navigate to="/jobs" replace />} />
               <Route path="jobs" element={<JobsPage />} />
+              <Route path="jobs/:jobId" element={<JobDetailsPage />} />
               <Route
                 path="admin"
                 element={

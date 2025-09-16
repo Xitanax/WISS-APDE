@@ -3,23 +3,13 @@ import { Calendar } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
 
-const JobCard = ({ job, onApply, user }) => {
+const JobCard = ({ job, onViewDetails }) => {
   const isNew = () => {
     if (!job.createdAt) return false;
     const jobDate = new Date(job.createdAt);
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     return jobDate > weekAgo;
-  };
-
-  const getButtonText = () => {
-    if (!user) return 'Einloggen zum Bewerben';
-    if (user.role !== 'applicant') return 'Nur für Bewerber';
-    return 'Bewerben';
-  };
-
-  const isButtonDisabled = () => {
-    return user && user.role !== 'applicant';
   };
 
   return (
@@ -35,9 +25,11 @@ const JobCard = ({ job, onApply, user }) => {
           )}
         </div>
       </div>
-      
-      <p className="text-gray-400 mb-4 line-clamp-3">{job.description}</p>
-      
+
+      <p className="text-gray-400 mb-4 line-clamp-3">
+        {job.shortDescription || job.description}
+      </p>
+
       {job.createdAt && (
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
           <Calendar size={16} />
@@ -46,17 +38,12 @@ const JobCard = ({ job, onApply, user }) => {
           </span>
         </div>
       )}
-      
+
       <button
-        onClick={onApply}
-        disabled={isButtonDisabled()}
-        className={`w-full py-2 px-4 rounded transition-colors ${
-          isButtonDisabled() 
-            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700 text-white'
-        }`}
+        onClick={onViewDetails}
+        className="w-full py-2 px-4 rounded transition-colors bg-blue-600 hover:bg-blue-700 text-white"
       >
-        {getButtonText()}
+        Details ansehen
       </button>
     </div>
   );

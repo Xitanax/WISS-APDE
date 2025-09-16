@@ -77,3 +77,67 @@ body {
 .table td {
   @apply px-6 py-4 whitespace-nowrap text-sm text-gray-300 border-b border-gray-700;
 }
+
+.rich-text-wrapper {
+  background-color: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.rich-text-toolbar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background-color: #111827;
+  border-bottom: 1px solid #374151;
+}
+
+.rich-text-button {
+  font-size: 0.75rem;
+  color: #e5e7eb;
+  background: transparent;
+  border: 1px solid #4b5563;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.rich-text-button:hover {
+  background-color: #1f2937;
+  color: #bfdbfe;
+}
+
+.rich-text-editor {
+  min-height: 180px;
+  padding: 0.75rem;
+  color: #f9fafb;
+  line-height: 1.6;
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.rich-text-editor[contenteditable="true"]:empty:before {
+  content: attr(data-placeholder);
+  color: #6b7280;
+}
+
+.rich-text-content {
+  color: #e5e7eb;
+  line-height: 1.7;
+}
+
+.rich-text-content p {
+  margin-bottom: 1rem;
+}
+
+.rich-text-content ul,
+.rich-text-content ol {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.rich-text-content li {
+  margin-bottom: 0.5rem;
+}

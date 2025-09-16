@@ -23,7 +23,9 @@ const JobsScreen = () => {
   const renderJob = ({item}) => (
     <View style={styles.jobCard}>
       <Text style={styles.jobTitle}>{item.title}</Text>
-      <Text style={styles.jobDescription}>{item.description}</Text>
+      <Text style={styles.jobDescription}>
+        {(item.shortDescription || item.description || '').replace(/<[^>]+>/g, '').trim()}
+      </Text>
       <TouchableOpacity style={styles.applyButton}>
         <Text style={styles.applyButtonText}>
           {user ? 'Bewerben' : 'Einloggen zum Bewerben'}
